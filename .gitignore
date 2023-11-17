@@ -1,3 +1,6 @@
 *.exe 
 *.pdb
 .build
+.DS_Store
+guitar
+guitar.dSYM

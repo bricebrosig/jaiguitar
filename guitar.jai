@@ -30,10 +30,13 @@ sharps: []string = .["A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#",
 
 tuning: []int = .[7, 2, 10, 5, 0, 7];  // tuning of the strings, BACKWARDS
 
-int_to_note :: (offset: int, fret: int, s_or_f: SharpsOrFlats = .SHARPS) -> string {
+int_to_note :: (offset: int, fret: int) -> string {
     if fret == -1  return "  ";
-    if s_or_f == .FLATS return flats[(offset + fret) % 12];
-    else                return sharps[(offset + fret) % 12];
+    if sharps_or_flats == {
+        case .FLATS ;  return flats[(offset + fret) % 12];
+        case .SHARPS;  #through;
+        case; return sharps[(offset + fret) % 12];
+    }
 }
 
 get_note :: (g: Fret, fret: int, offset: int) -> string {
@@ -166,7 +169,7 @@ draw_one_frame :: (dt: float) {
     r6 := get_rect(window_width * .1, h_mid - 5*fret_height, fret_width, fret_height);
 
     text_x := cast(s64) (window_width * .1);
-    text_y := cast(s64) (h_mid + ch / 2);
+    text_y := cast(s64) (h_mid + fret_height / 4);
     text_color: Vector4 = .{200, 200, 220, 255};
     
     characters_to_draw := string.["e","B","G","D","A","E"];
@@ -194,7 +197,7 @@ draw_one_frame :: (dt: float) {
     r4.x += r4.w;
     r5.x += r5.w;
     r6.x += r6.w;
-    text_x += cast(s64) r6.w;
+    text_x = cast(s64) r6.x;
     
     for 0..21 {
         radio_button(r1, get_note(string_1, it, tuning[0]), *string_1, cast(Fret) it, *radio_theme, it);
@@ -214,7 +217,7 @@ draw_one_frame :: (dt: float) {
         r4.x += r4.w;
         r5.x += r5.w;
         r6.x += r6.w;
-        text_x += cast(s64) r6.w;
+        text_x = cast(s64) r6.x;
     }
     
     //

@@ -16,13 +16,14 @@ my_theme: Overall_Theme;  // This gets filled out by calling the Theme_Proc for 
 // and that makes things very easy
 Fret :: enum s32 {
     NONE :: -1; 
-    ZERO :: 0; 
+    ZERO :: 0;
     ONE; TWO; THREE; FOUR; FIVE; SIX; SEVEN; EIGHT; NINE; TEN;
     ELEVEN; TWELVE; THIRTEEN; FOURTEEN; FIFTEEN; SIXTEEN; SEVENTEEN;
     EIGHTEEN; NINETEEN; TWENTY; TWENTY_ONE;
 }
 
 SharpsOrFlats :: enum { SHARPS; FLATS; }
+sharps_or_flats : SharpsOrFlats = .SHARPS;
 
                    // 0     1     2     3     4     5     6     7     8     9     10    11
 flats : []string = .["A ", "Bb", "B ", "C ", "Db", "D ", "Eb", "E ", "F ", "Gb", "G ", "Ab"];
@@ -30,23 +31,20 @@ sharps: []string = .["A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#",
 
 tuning: []int = .[7, 2, 10, 5, 0, 7];  // tuning of the strings, BACKWARDS
 
-int_to_note :: (offset: int, fret: int) -> string {
-    if fret == -1  return "  ";
-    if sharps_or_flats == {
-        case .FLATS ;  return flats[(offset + fret) % 12];
-        case .SHARPS;  #through;
-        case; return sharps[(offset + fret) % 12];
+get_note :: (g_string: Fret, fret: int, offset: int) -> string {
+    if fret >= 0 && fret == cast(int) g_string {
+        if sharps_or_flats == {
+            case .FLATS ;  return flats[(offset + fret) % 12];
+            case .SHARPS;  #through;
+            case; return sharps[(offset + fret) % 12];
+        }
     }
-}
-
-get_note :: (g: Fret, fret: int, offset: int) -> string {
-    if fret == cast(int) g  return int_to_note(offset, fret);
     return "  ";
 }
 
-sharps_or_flats : SharpsOrFlats = .SHARPS;
 
 // the strings
+// TODO (brice): support for 7 strings? 8 strings?
 string_1: Fret = 0;
 string_2: Fret = 0;
 string_3: Fret = 0;
@@ -80,7 +78,7 @@ main :: () {
 
     Simp.set_render_target(my_window);
 
-    my_init_fonts();
+    init_fonts();
     ui_init();
     
     quit := false;
@@ -101,7 +99,7 @@ main :: () {
                 window_width  = it.width;
                 window_height = it.height;
 
-                if should_reinit my_init_fonts();  // Resize the font for the new window size.
+                if should_reinit init_fonts();  // Resize the font for the new window size.
             }
         }
 
@@ -224,12 +222,14 @@ draw_one_frame :: (dt: float) {
     // draw chords
     //
     
-    
+    // r = get_rect(window_width * .1, window_height * .1, cast(float) title_font.em_width, cast(float) title_font.character_height)
+    Simp.prepare_text(title_font, "Cmaj7add9");
+    Simp.draw_prepared_text(title_font, cast(s64) (window_width * .1), cast(s64) (window_height * .8), color=text_color);
 
     Simp.swap_buffers(my_window);
 }  // draw_one_frame
 
-my_init_fonts :: () {
+init_fonts :: () {
     if !working_directory_set {
         // So that we can load our font, set to path of running executable.
         path := path_strip_filename(get_path_of_running_executable());
@@ -247,20 +247,14 @@ my_init_fonts :: () {
     assert(button_font != null);
 
     pixel_height = window_height / 7;
-    title_font = Simp.get_font_at_size("data", "Miama.otf", pixel_height);
-
-    pixel_height = window_height / 30;
-    story_font = Simp.get_font_at_size("data", "OpenSans-BoldItalic.ttf", pixel_height);
-//    title_font = Simp.get_font_at_size("data", "OpenSans-BoldItalic.ttf", pixel_height);
+    title_font = Simp.get_font_at_size("data", "OpenSans-BoldItalic.ttf", pixel_height);
 }
 
 Font :: Simp.Dynamic_Font;
 
-// TODO (brice): clean up the font stuff
 my_font:     *Font;
 button_font: *Font;
 title_font:  *Font;
-story_font:  *Font;
 
 working_directory_set := false;
 

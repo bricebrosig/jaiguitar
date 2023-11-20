@@ -29,17 +29,32 @@ sharps_or_flats : SharpsOrFlats = .SHARPS;
 flats : []string = .["A ", "Bb", "B ", "C ", "Db", "D ", "Eb", "E ", "F ", "Gb", "G ", "Ab"];
 sharps: []string = .["A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#"];
 
-tuning: []int = .[7, 2, 10, 5, 0, 7];  // tuning of the strings, BACKWARDS
+all_notes: []string;
 
+tuning: []int    = .[7, 2, 10, 5, 0, 7];  // tuning of the strings, BACKWARDS
+
+//
+// choose between flat and sharp based on the global and then mod the semitone
+// into the range of the notes
 get_note :: (g_string: Fret, fret: int, offset: int) -> string {
     if fret >= 0 && fret == cast(int) g_string {
-        if sharps_or_flats == {
-            case .FLATS ;  return flats[(offset + fret) % 12];
-            case .SHARPS;  #through;
-            case; return sharps[(offset + fret) % 12];
-        }
+        return all_notes[(offset + fret) % 12];
     }
     return "  ";
+}
+
+print_chords :: (notes: []int) {
+    for i: 0..2 {
+        // establish a  root
+        root := notes[i];
+        print("% -- ", all_notes[root % 12]);
+        print("<");
+
+        // get the intervals to other notes in the chord
+        for j: 0..notes.count-2 {
+            
+        }
+    }
 }
 
 
@@ -80,13 +95,28 @@ main :: () {
 
     init_fonts();
     ui_init();
+
+    //
+    // init some state
+    //
+
+    all_notes = sharps;  // a view onto either sharps or flats that we will toggle between the two
     
     quit := false;
     while !quit {
+        
+        //
+        // time
+        //
+
         current_time = get_time();
         dt := cast(float)(current_time - last_time);
         Clamp(*dt, 0, 0.1);
         last_time = current_time;
+
+        //
+        // window events
+        //
 
         Input.update_window_events();
 
@@ -115,6 +145,20 @@ main :: () {
                 }
             }
         }
+
+        //
+        // my stuff
+        //
+
+        if sharps_or_flats == {
+            case .FLATS ;  all_notes = flats;
+            case .SHARPS;  #through;
+            case; all_notes = sharps;
+        }
+
+        //
+        // draw call
+        //
 
         draw_one_frame(dt);
 
@@ -170,8 +214,8 @@ draw_one_frame :: (dt: float) {
     text_y := cast(s64) (h_mid + fret_height / 4);
     text_color: Vector4 = .{200, 200, 220, 255};
     
-    characters_to_draw := string.["e","B","G","D","A","E"];
-    for char: characters_to_draw {
+    for str_val: tuning {
+        char := all_notes[str_val % 12];
         text_width := Simp.prepare_text(my_font, char);
         Simp.draw_prepared_text(my_font, text_x - cast(s64) (3 * cw), text_y, color=text_color);
         text_y -= cast(s64) fret_height;
@@ -196,14 +240,34 @@ draw_one_frame :: (dt: float) {
     r5.x += r5.w;
     r6.x += r6.w;
     text_x = cast(s64) r6.x;
+
+    prev: Fret;
+    pressed: bool;
     
     for 0..21 {
-        radio_button(r1, get_note(string_1, it, tuning[0]), *string_1, cast(Fret) it, *radio_theme, it);
-        radio_button(r2, get_note(string_2, it, tuning[1]), *string_2, cast(Fret) it, *radio_theme, it);
-        radio_button(r3, get_note(string_3, it, tuning[2]), *string_3, cast(Fret) it, *radio_theme, it);
-        radio_button(r4, get_note(string_4, it, tuning[3]), *string_4, cast(Fret) it, *radio_theme, it);
-        radio_button(r5, get_note(string_5, it, tuning[4]), *string_5, cast(Fret) it, *radio_theme, it);
-        radio_button(r6, get_note(string_6, it, tuning[5]), *string_6, cast(Fret) it, *radio_theme, it);
+        prev = string_1;
+        pressed = radio_button(r1, get_note(string_1, it, tuning[0]), *string_1, cast(Fret) it, *radio_theme, it);
+        if pressed && prev == string_1  string_1 = .NONE;
+        
+        prev = string_2;
+        pressed = radio_button(r2, get_note(string_2, it, tuning[1]), *string_2, cast(Fret) it, *radio_theme, it);
+        if pressed && prev == string_2  string_2 = .NONE;
+
+        prev = string_3;
+        pressed = radio_button(r3, get_note(string_3, it, tuning[2]), *string_3, cast(Fret) it, *radio_theme, it);
+        if pressed && prev == string_3  string_3 = .NONE;
+
+        prev = string_4;
+        pressed = radio_button(r4, get_note(string_4, it, tuning[3]), *string_4, cast(Fret) it, *radio_theme, it);
+        if pressed && prev == string_4  string_4 = .NONE;
+
+        prev = string_5;
+        pressed = radio_button(r5, get_note(string_5, it, tuning[4]), *string_5, cast(Fret) it, *radio_theme, it);
+        if pressed && prev == string_5  string_5 = .NONE;
+        
+        prev = string_6;
+        pressed = radio_button(r6, get_note(string_6, it, tuning[5]), *string_6, cast(Fret) it, *radio_theme, it);
+        if pressed && prev == string_6  string_6 = .NONE;
         
         // TODO (brice): make a quick draw_text function
         text_width := Simp.prepare_text(my_font, tprint("%", formatInt(it, padding=3)));
@@ -222,8 +286,14 @@ draw_one_frame :: (dt: float) {
     // draw chords
     //
     
-    // r = get_rect(window_width * .1, window_height * .1, cast(float) title_font.em_width, cast(float) title_font.character_height)
-    Simp.prepare_text(title_font, "Cmaj7add9");
+    Simp.prepare_text(title_font, tprint("[%, %, %, %, %, %]", 
+        cast(int) string_6,
+        cast(int) string_5, 
+        cast(int) string_4, 
+        cast(int) string_3, 
+        cast(int) string_2, 
+        cast(int) string_1) 
+    );
     Simp.draw_prepared_text(title_font, cast(s64) (window_width * .1), cast(s64) (window_height * .8), color=text_color);
 
     Simp.swap_buffers(my_window);

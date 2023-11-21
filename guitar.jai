@@ -92,6 +92,7 @@ print_chords :: (str: *String_Builder, fretted: []int) {
     ));
     
     for i: 0..2 {
+        if fretted[i] == -1  continue;
         // establish a  root
         root := tuning[i].note + fretted[i];
         append(str, tprint("% -- ", all_notes[root % 12]));
@@ -100,6 +101,7 @@ print_chords :: (str: *String_Builder, fretted: []int) {
         // get the intervals to other notes in the chord
         pitch_class: [..]int;  defer array_free(pitch_class);
         for j: 0..fretted.count-1 {
+            if fretted[j] == -1  continue;
             if i != j {
                 interval := get_interval_in_semitones((tuning[i].note + fretted[i]) % 12, (tuning[j].note + fretted[j]) % 12);
                 if interval != 12 
@@ -362,7 +364,7 @@ draw_one_frame :: (dt: float) {
     //
         
     font  := button_font;
-    text  := builder_to_string(*output_buffer);
+    text  := builder_to_string(*output_buffer, temp);
     lines := split(text, "\n");
 
     K :: .5;

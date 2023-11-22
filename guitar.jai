@@ -1,5 +1,3 @@
-#import "GetRect";
-
 SCALE :: 1;  // use this during development to quickly make the window real big.
 
 my_window: Window_Type;
@@ -59,7 +57,7 @@ all_notes: []string;
 
 // tuning: []int    = .[7, 2, 10, 5, 0, 7];  // tuning of the strings, BACKWARDS
 // tuning: []int = .[7, 0, 5, 10, 2, 7];  // tuning low to high
-tuning: []Pitch = .[.{E, 2}, .{A, 2}, .{D, 3}, .{G, 3}, .{B, 3}, .{E, 4}];  // tuning low to high
+tuning: [..]Pitch;
 
 currently_fretted: [6]int;
 
@@ -168,6 +166,13 @@ main :: () {
     // and then display them from that buffer as well.
     init_string_builder(*output_buffer);
     
+    array_add(*tuning, .{E, 2});
+    array_add(*tuning, .{A, 2});
+    array_add(*tuning, .{D, 3});
+    array_add(*tuning, .{G, 3});
+    array_add(*tuning, .{B, 3});
+    array_add(*tuning, .{E, 4});
+    
     quit := false;
     while !quit {
         
@@ -265,7 +270,7 @@ draw_one_frame :: (dt: float) {
     h_mid := cast(float) (window_height / 2);
     
     fret_width  := cast(float) (window_width * .8) / 22;
-    fret_height := cast(float) (window_height / 18);
+    fret_height := cast(float) (window_height / 24);
     
     //
     // sharps or flats toggle
@@ -286,19 +291,24 @@ draw_one_frame :: (dt: float) {
     r4 := get_rect(window_width * .1, h_mid - 3*fret_height, fret_width, fret_height);
     r5 := get_rect(window_width * .1, h_mid - 4*fret_height, fret_width, fret_height);
     r6 := get_rect(window_width * .1, h_mid - 5*fret_height, fret_width, fret_height);
-
-    text_x := cast(s64) (window_width * .1);
-    text_y := cast(s64) (h_mid - fret_height * 5 + fret_height / 4);
+    
+    ddx := window_width * .1;
+    ddy := h_mid - fret_height * 5 + fret_height / 4;
     text_color: Vector4 = .{200, 200, 220, 255};
     
-    for str_val: tuning {
-        char := all_notes[str_val.note % 12];
-        text_width := Simp.prepare_text(my_font, char);
-        Simp.draw_prepared_text(my_font, text_x - cast(s64) (3 * cw), text_y, color=text_color);
-        text_y += cast(s64) fret_height;
+    picker_height := fret_height * .75;
+    r = get_rect(ddx - 6 * cw, ddy, cw * 5, picker_height);
+    for tuning {
+        // char := all_notes[str_val.note % 12];
+        // text_width := Simp.prepare_text(my_font, char);
+        // Simp.draw_prepared_text(my_font, ddx - cast(s64) (3 * cw), ddy, color=text_color);
+        // ddy += cast(s64) fret_height;
+        
+        dropdown(r, all_notes, xx *it.note, identifier = it_index);
+        r.y += fret_height;
     }
     
-    text_y = cast(s64) (h_mid - 6 * fret_height);
+    text_y := cast(s64) (h_mid - 6 * fret_height);
     
     radio_button(r1, get_note(string_1, -1, tuning[5].note), *string_1, cast(Fret) -1, *radio_theme);
     radio_button(r2, get_note(string_2, -1, tuning[4].note), *string_2, cast(Fret) -1, *radio_theme);
@@ -316,7 +326,7 @@ draw_one_frame :: (dt: float) {
     r4.x += r4.w;
     r5.x += r5.w;
     r6.x += r6.w;
-    text_x = cast(s64) r6.x;
+    text_x := cast(s64) r6.x;
 
     prev: Fret;
     pressed: bool;
@@ -364,7 +374,7 @@ draw_one_frame :: (dt: float) {
     //
         
     font  := button_font;
-    text  := builder_to_string(*output_buffer, temp);
+    text  := builder_to_string(*output_buffer, temp);  // using temp - draw the text and forget
     lines := split(text, "\n");
 
     K :: .5;
@@ -379,7 +389,8 @@ draw_one_frame :: (dt: float) {
         Simp.draw_text(font, xx tx, xx ty, trimmed, color);
         ty -= cast(float) font.default_line_spacing;
     }
-        
+    
+    draw_popups();    
     Simp.swap_buffers(my_window);
 }  // draw_one_frame
 
@@ -417,6 +428,7 @@ Simp  :: #import "Simp";
 Input :: #import "Input";
 
 #import "Window_Creation";
+#import "GetRect";
 
 #import "Basic";
 Basic :: #import "Basic"; // :CompilerBug  We need this to resolve to_lower for some reason?!

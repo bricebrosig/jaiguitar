@@ -106,7 +106,6 @@ dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *D
         draw_arrow(current_value_state, p4, p5, p6, *theme.theme_for_current_value);
     }
 
-    
     if state.open {
         state.base_rect             = r;
         state.choices               = choices;
@@ -121,7 +120,7 @@ dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *D
     add_popup(draw_dropdown_popup, state, state.z);
     // draw_dropdown_popup(state);
     return state;
-}    
+}  // dropdown    
 
 draw_dropdown_popup :: (_state: *void) {
     state := cast(*Dropdown_State) _state;
@@ -142,13 +141,13 @@ draw_dropdown_popup :: (_state: *void) {
     
     // For now, assume the choices are the same height as the current value display.
     s := r;
-    // s.y -= r.h;  // @brice  to make the dropdown go up
+    s.y += r.h;  // @brice make the dropdown go up
 
     top_y    := s.y;
     bottom_y := s.y;
     
     pick_choice := -1;
-    if state.open {
+    if state.open {  // don't we not need to do this check?
         for choices {
             sub_hash := get_hash(#location(), it_index);
             choice_hash := combine_hashes(state.hash, sub_hash);
@@ -159,7 +158,7 @@ draw_dropdown_popup :: (_state: *void) {
             pressed, _, released := button(s, it, t, xx choice_hash, state.loc);
             bottom_y = s.y;
             // s.y -= s.h;
-            s.y += s.h;  // @brice  to make the dropdown go up
+            s.y += s.h;  // @brice make the dropdown go up
 
             if released {
                 pick_choice = it_index;
@@ -173,11 +172,11 @@ draw_dropdown_popup :: (_state: *void) {
         }
     }
 
-    s.h = top_y - bottom_y;
+    s.h = bottom_y - top_y;  // flipped because it goes up now top_y - bottom_y;
     s.y = bottom_y;   // Undo the y motion from the final choice.
     occluded := bound(r, s);
     occlusion_declare(occluded, state);
-}
+} // draw_dropdown_popup
 
 
 dropdown_deactivate :: (widget: *Active_Widget) {

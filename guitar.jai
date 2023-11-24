@@ -293,17 +293,12 @@ draw_one_frame :: (dt: float) {
     r6 := get_rect(window_width * .1, h_mid - 5*fret_height, fret_width, fret_height);
     
     ddx := window_width * .1;
-    ddy := h_mid - fret_height * 5 + fret_height / 4;
+    ddy := h_mid - fret_height * 5 + fret_height / 8;
     text_color: Vector4 = .{200, 200, 220, 255};
     
     picker_height := fret_height * .75;
     r = get_rect(ddx - 6 * cw, ddy, cw * 5, picker_height);
     for tuning {
-        // char := all_notes[str_val.note % 12];
-        // text_width := Simp.prepare_text(my_font, char);
-        // Simp.draw_prepared_text(my_font, ddx - cast(s64) (3 * cw), ddy, color=text_color);
-        // ddy += cast(s64) fret_height;
-        
         dropdown(r, all_notes, xx *it.note, identifier = it_index);
         r.y += fret_height;
     }

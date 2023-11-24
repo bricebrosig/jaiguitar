@@ -172,7 +172,7 @@ draw_dropdown_popup :: (_state: *void) {
         }
     }
 
-    s.h = bottom_y - top_y;  // flipped because it goes up now top_y - bottom_y;
+    s.h = bottom_y - top_y;  // flipped because it goes up now
     s.y = bottom_y;   // Undo the y motion from the final choice.
     occluded := bound(r, s);
     occlusion_declare(occluded, state);

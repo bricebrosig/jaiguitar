@@ -270,7 +270,7 @@ draw_one_frame :: (dt: float) {
     h_mid := cast(float) (window_height / 2);
     
     fret_width  := cast(float) (window_width * .8) / 22;
-    fret_height := cast(float) (window_height / 24);
+    fret_height := cast(float) (window_height / 20);
     
     //
     // sharps or flats toggle
@@ -398,7 +398,7 @@ init_fonts :: () {
         working_directory_set = true;
     }
 
-    pixel_height := window_height / 24;
+    pixel_height := window_height / 22;
     my_font = Simp.get_font_at_size("data", "OpenSans-BoldItalic.ttf", pixel_height);
     assert(my_font != null);
     

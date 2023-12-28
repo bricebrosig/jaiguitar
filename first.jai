@@ -20,7 +20,7 @@ build :: () {
     compiler_begin_intercept(w);  // tell compiler to give messages
 
     add_build_file("guitar.jai", w);  // add out source
-    
+
     // compiler message loop (only check for failure
     failed := false;
     while true {

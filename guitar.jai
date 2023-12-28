@@ -304,7 +304,7 @@ draw_one_frame :: (dt: float) {
     }
     
     text_y := cast(s64) (h_mid - 6 * fret_height);
-    
+
     radio_button(r1, get_note(string_1, -1, tuning[5].note), *string_1, cast(Fret) -1, *radio_theme);
     radio_button(r2, get_note(string_2, -1, tuning[4].note), *string_2, cast(Fret) -1, *radio_theme);
     radio_button(r3, get_note(string_3, -1, tuning[3].note), *string_3, cast(Fret) -1, *radio_theme);
@@ -314,7 +314,7 @@ draw_one_frame :: (dt: float) {
     
     text_width := Simp.prepare_text(my_font, "x  ");
     Simp.draw_prepared_text(my_font, cast(s64) r1.x, text_y, color=text_color);
-    
+
     r1.x += r1.w;
     r2.x += r2.w;
     r3.x += r3.w;

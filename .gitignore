@@ -1,6 +1,8 @@
 *.exe 
 *.pdb
 .build
+build
 .DS_Store
 guitar
 guitar.dSYM
+*.raddbg

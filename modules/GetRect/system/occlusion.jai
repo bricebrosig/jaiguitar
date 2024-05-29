@@ -14,7 +14,7 @@ occlusion_per_frame_update :: () {
 
     quick_sort(occlusions_current_frame, x => -x.serial);
 
-    current_occluder = null;
+    occluder_under_the_cursor = null;
 }
 
 occlusion_per_window_update :: (window: Window_Type) {
@@ -22,29 +22,49 @@ occlusion_per_window_update :: (window: Window_Type) {
     for * occlusions_current_frame {
         if it.widget.window != window continue;
         if is_inside(x, y, it.rect) {
-            current_occluder = it.widget;
+            occluder_under_the_cursor = it.widget;
             break;
         }
     }
 }
 
-occlusion_declare :: (rect: Rect, widget: *Active_Widget) {
+occluder_start :: (widget: *Active_Widget, rect: Rect) {
     record := array_add(*occlusions_next_frame);
-
     record.serial = cast(s32)(occlusions_next_frame.count);
     record.rect   = rect;
     record.widget = widget;
+
+    occluder_being_drawn = widget;
+    array_add(*occluders_being_drawn_stack, widget);
 }
 
-events_occluded :: () -> bool {
-    // Kind of cheesy, but, probably works?
-    // If whoever is marked as current_occluder has not yet
-    // declared its occlusion this frame, we are occluded!
-    
-    if !current_occluder                   return false;
-    if current_occluder.is_on_state_stack  return false;
+occluder_finish :: (widget: *Active_Widget, rect := Rect.{}) {
+    assert(occluders_being_drawn_stack.count > 0, "occluder_finish called without preceding occluder_start call.");
+    assert(peek(occluders_being_drawn_stack) == widget, "occluder_finish widget does not match occluder_start.");
+    pop(*occluders_being_drawn_stack);
+    occluder_being_drawn = ifx occluders_being_drawn_stack then peek(occluders_being_drawn_stack);
 
-    return current_occluder.last_getrect_frame != current_getrect_frame;
+    if rect.w {
+        for * < occlusions_next_frame {
+            if it.widget == widget {
+                it.rect = rect;
+                return;
+            }
+        }
+        assert(false, "Could not find this widget on occlusions_next_frame (which is where it should be if occluder_start was called!)");
+    }
+}
+
+events_occluded :: (widget_if_querying_outside_of_render_time: *Active_Widget = null) -> bool {
+    // @Cleanup: We can probably simplify this now.
+
+    if !occluder_under_the_cursor                   return false;
+    if occluder_under_the_cursor.is_on_state_stack  return false;
+
+    w := widget_if_querying_outside_of_render_time;
+    if w && (occluder_under_the_cursor == w.exists_on_occluder) return false;
+
+    return occluder_under_the_cursor.last_getrect_frame != current_getrect_frame;
 }
 
 Occlusion_Record :: struct {
@@ -56,6 +76,10 @@ Occlusion_Record :: struct {
 occlusions_current_frame: [..] Occlusion_Record;
 occlusions_next_frame:    [..] Occlusion_Record;
 
+occluder_being_drawn: *Active_Widget;
+
 #scope_file
+
+occluders_being_drawn_stack: [..] *Active_Widget;
 
 #import "Sort";

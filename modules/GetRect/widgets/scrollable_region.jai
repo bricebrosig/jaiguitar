@@ -1,6 +1,6 @@
 begin_scrollable_region :: (r: Rect, theme: *Scrollable_Region_Theme = null, identifier: s64 = 0, loc := #caller_location) -> (state: *Scrollable_Region_State, inside: Rect) {
     if !theme  theme = *default_overall_theme.scrollable_region_theme;
-    
+
     rth := render_target_height;
 
     margin_x := floor(theme.horizontal_margin_size * rth + .5);
@@ -9,8 +9,14 @@ begin_scrollable_region :: (r: Rect, theme: *Scrollable_Region_Theme = null, ide
     if !(theme.margin_flags & .Horizontal)  margin_x = 0;
     if !(theme.margin_flags & .Vertical)    margin_y = 0;
 
-    scrollbar_width := floor(theme.scrollbar_size * rth + .5);
-    bar_rect, content_area := cut_right(r, scrollbar_width);
+    scrollbar_size := floor(theme.scrollbar_size * rth + .5);
+    is_vertical := !(theme.direction & .HORIZONTAL); // @TODO Eventually we should support both at once, but for now it's one or the other.
+
+    bar_rect, content_area: Rect = ---;
+    if is_vertical
+        bar_rect, content_area = cut_right(r, scrollbar_size);
+    else
+        bar_rect, content_area = cut_bottom(r, scrollbar_size);
 
     inside := content_area;
     inside.x += margin_x;
@@ -21,7 +27,7 @@ begin_scrollable_region :: (r: Rect, theme: *Scrollable_Region_Theme = null, ide
     // Draw the background quad.
     draw_procs.set_shader_for_color(true);
     rounded_rectangle(content_area, theme.region_background.shape, theme.region_background.color, theme.region_background.frame_color);
-    
+
     push_scissor(inside);
 
     hash  := get_hash(loc, identifier);
@@ -32,26 +38,30 @@ begin_scrollable_region :: (r: Rect, theme: *Scrollable_Region_Theme = null, ide
     state.outer_rect = r;
     state.inner_rect = inside;
     state.bar_rect   = bar_rect;
-    
+
     return state, inside;
 }
 
 end_scrollable_region :: (state: *Scrollable_Region_State, max_x: float, min_y: float, scroll_value: *float) {
     theme := *state.theme;
+    is_vertical := !(theme.direction & .HORIZONTAL); // @TODO Eventually we should support both at once, but for now it's one or the other.
 
     pop_scissor();
 
     inner := state.inner_rect;
     bar   := state.bar_rect;
-    status_r   := get_status_flags(inner, cares_about_left_click=false);
-    status_bar := get_status_flags(bar);
+    status_r   := get_status_flags(inner, ignore=.LEFT_CLICK|.TOOLTIP);
+    status_bar := get_status_flags(bar, ignore=.TOOLTIP);
 
-    scroll_content_height := max(inner.y + inner.h + scroll_value.* - min_y, inner.h);
-    if scroll_content_height <= 0.0  return;
-    max_scroll_value := scroll_content_height - inner.h;
+    scroll_content_size := ifx is_vertical
+                           then max(inner.y + inner.h + scroll_value.* - min_y, inner.h)
+                           else max(max_x - (inner.x - scroll_value.*), inner.w);
+    if scroll_content_size <= 0.0  return;
+    max_scroll_value := scroll_content_size - ifx is_vertical inner.h else inner.w;
 
-    b := floor(bar.w * theme.nib_margin + .5);
-    min_nib_height := bar.w * theme.minimum_nib_height;
+    bar_size := ifx is_vertical then bar.w else bar.h;
+    b := floor(bar_size * theme.nib_margin + .5);
+    min_nib_size := bar_size * theme.minimum_nib_size;
 
     // @Incomplete: Control whether bar draws with a style flag.
     draw_bar := true; // bar.w > 2*b && bar.h > 2*b;
@@ -63,33 +73,44 @@ end_scrollable_region :: (state: *Scrollable_Region_State, max_x: float, min_y: 
         // trench_rect := get_rect(bar.x + b, bar.y + b, bar.w - 2*b, bar.h - 2*b);
         {
             rounded_rectangle(bar, theme.scrollbar_background.shape, background_color, theme.scrollbar_background.frame_color); // :FrameColor
-        
+
             // p0, p1, p2, p3 = get_quad(trench_rect);
             // draw_procs.immediate_quad(p0, p1, p2, p3, whiten(trench_color, 0.1));
         }
-        
-        nib_height := min(max(trench_rect.h * (inner.h / scroll_content_height), min_nib_height), trench_rect.h);
-        scroll_percent := 0.0;
-        if max_scroll_value > 0.0  scroll_percent = scroll_value.* / max_scroll_value;
-        nib_top := lerp(trench_rect.y + trench_rect.h, trench_rect.y + nib_height, scroll_percent);
-        
-        nib_rect := get_rect(trench_rect.x + b, nib_top - nib_height, trench_rect.w - 2*b, nib_height);
-        nib_status    := get_status_flags(nib_rect);
+
+        nib_rect: Rect = ---;
+        nib_size: float = ---;
+        if is_vertical {
+            nib_size = min(max(trench_rect.h * (inner.h / scroll_content_size), min_nib_size), trench_rect.h);
+            scroll_percent := 0.0;
+            if max_scroll_value > 0.0  scroll_percent = scroll_value.* / max_scroll_value;
+            nib_top := lerp(trench_rect.y + trench_rect.h, trench_rect.y + nib_size, scroll_percent);
+
+            nib_rect = get_rect(trench_rect.x + b, nib_top - nib_size, trench_rect.w - 2*b, nib_size);
+        } else {
+            nib_size = min(max(trench_rect.w * (inner.w / scroll_content_size), min_nib_size), trench_rect.w);
+            scroll_percent := 0.0;
+            if max_scroll_value > 0.0  scroll_percent = scroll_value.* / max_scroll_value;
+            nib_left := lerp(trench_rect.x, trench_rect.x + trench_rect.w - nib_size, scroll_percent);
+
+            nib_rect = get_rect(nib_left, trench_rect.y + b, nib_size, trench_rect.h - 2*b);
+        }
+        nib_status := get_status_flags(nib_rect, ignore=.TOOLTIP);
 
         changed := cast(bool)(nib_status & .PRESSED);
         if changed {
             active_widget_deactivate_all();
         }
-        
+
         if state.dragging  nib_status |= Status_Flags.OVER | .DOWN; // Even if we go outside the rect, while dragging, have it stay in OVER state.
 
         start_using_state(*state.nib_state); // We do this so that the scrollbar nib animates its colors.
-        
+
         update_production_value_button(nib_rect, changed, *state.nib_state, nib_status, *theme.scrollbar_nib_theme);
 
         nib_surface_color, nib_frame_color, nib_frame_thickness := get_colors_and_thickness_for_button(*theme.scrollbar_nib_theme, *state.nib_state);
-        
-        trench_status := get_status_flags(trench_rect);
+
+        trench_status := get_status_flags(trench_rect, ignore=.TOOLTIP);
 
         teleporting := false;
         if (nib_status & .OVER) && (mouse_button_left_state & .START) {
@@ -107,17 +128,32 @@ end_scrollable_region :: (state: *Scrollable_Region_State, max_x: float, min_y: 
             state.teleporting = false;
             active_widget_remove(state);
         }
-        
-        if nib_height < trench_rect.h {
-            if state.teleporting {
-                // Jump the scroll nib to the cursor.
-                p := (trench_rect.y + trench_rect.h - mouse_y_float - nib_height * 0.5) / (trench_rect.h - nib_height);
-                scroll_value.* = lerp(0.0, max_scroll_value, p);
+
+       if is_vertical {
+            if nib_size < trench_rect.h {
+                if state.teleporting {
+                    // Jump the scroll nib to the cursor.
+                    p := (trench_rect.y + trench_rect.h - mouse_y_float - nib_size * 0.5) / (trench_rect.h - nib_size);
+                    scroll_value.* = lerp(0.0, max_scroll_value, p);
+                }
+
+                if state.dragging {
+                    // Drag the scroll nib.
+                    scroll_value.* -= mouse_delta_y_float * max_scroll_value / (trench_rect.h - nib_size);
+                }
             }
-            
-            if state.dragging {
-                // Drag the scroll nib.
-                scroll_value.* -= mouse_delta_y_float * max_scroll_value / (trench_rect.h - nib_height);
+        } else {
+            if nib_size < trench_rect.w {
+                if state.teleporting {
+                    // Jump the scroll nib to the cursor.
+                    p := 1.0 - (trench_rect.x + trench_rect.w - mouse_x_float - nib_size * 0.5) / (trench_rect.w - nib_size);
+                    scroll_value.* = lerp(0.0, max_scroll_value, p);
+                }
+
+                if state.dragging {
+                    // Drag the scroll nib.
+                    scroll_value.* += mouse_delta_x_float * max_scroll_value / (trench_rect.w - nib_size);
+                }
             }
         }
 
@@ -128,16 +164,30 @@ end_scrollable_region :: (state: *Scrollable_Region_State, max_x: float, min_y: 
         stop_using_state(*state.nib_state);
     }
 
-    if ((status_r & .OVER) || (draw_bar && (status_bar & .OVER))) && mouse_delta_z {
-        dz := mouse_delta_z * (theme.mouse_wheel_increment * render_target_height);
+    mouse_wheel_horizontal_only := shift_key_state & .DOWN != 0; // So user can hold shift to only scroll horizontal regions (useful when regions are nested).
+
+    if ((status_r & .OVER) || (draw_bar && (status_bar & .OVER))) && mouse_delta_z && last_mouse_wheel_frame != current_getrect_frame && (!is_vertical || !mouse_wheel_horizontal_only) {
         // Scroll with the mouse wheel.
+        dz := mouse_delta_z * (theme.mouse_wheel_increment * render_target_height);
         scroll_value.* -= dz;
+
+        // @TODO There's really no situation where a scrollwheel input should be acted on by more than one widget, so GetRect should have a mechanism to control
+        //       which overlapped widget gets the scrollwheel, and make sure only that widget does.
+        //       Here we make sure only the inner scrollable region uses the scrollwheel, but that does not account for e.g. multiline_text_inputs.
+        last_mouse_wheel_frame = current_getrect_frame;
     }
 
     Clamp(scroll_value, 0.0, max_scroll_value);
 }
 
+Scrollable_Region_Flags :: enum_flags u8 {
+    VERTICAL :: 1;
+    HORIZONTAL :: 2;
+}
+
 Scrollable_Region_Theme :: struct {
+    direction := Scrollable_Region_Flags.VERTICAL;
+
     horizontal_margin_size := 0.005;   // Relative to render target height.
     vertical_margin_size   := 0.005;   // Relative to render target height. It's intentional that this is width and not height, because by default youwant the sizes of the two margins to be controllable relative to each other, not messed up by random aspect ratio changes.
 
@@ -145,9 +195,9 @@ Scrollable_Region_Theme :: struct {
 
     scrollbar_size := 0.03;            // Relative to render target height. This indicates the width for a vertical scrollbar, or height for a horizontal scrollbar.
 
-    minimum_nib_height := 1.0;         // Relative to scrollbar size. 1.0 means it will not get shorter than the width of the scrollbar.
+    minimum_nib_size := 1.0;           // Relative to scrollbar size. 1.0 means it will not get shorter than the breadth of the scrollbar.
     nib_margin := 0.10;                // Margin between trench and nib, relative to scrollbar size.
-    
+
     scrollbar_nib_theme: Button_Theme;
     scrollbar_nib_theme.surface_color                    = Vector4.{.55, .05, .55, 1};
     scrollbar_nib_theme.surface_color_over               = Vector4.{.70, .05, .70, 1};
@@ -185,9 +235,9 @@ Scrollable_Region_Theme :: struct {
 
 Scrollable_Region_State :: struct #type_info_none {
     #as using widget: Active_Widget;
-    
+
     nib_state:  Button_State;
-    
+
     outer_rect: Rect;
     inner_rect: Rect;
     bar_rect:   Rect;
@@ -198,3 +248,6 @@ Scrollable_Region_State :: struct #type_info_none {
     theme: Scrollable_Region_Theme;  // Here so the user doesn't have to manually re-pass this to end_scrollable_region.
 }
 
+#scope_file
+
+last_mouse_wheel_frame: u64;

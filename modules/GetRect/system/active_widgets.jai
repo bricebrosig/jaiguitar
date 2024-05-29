@@ -14,7 +14,10 @@ active_widget_add :: (widget: *Active_Widget, is_grabbing := false) {
 }
 
 active_widget_remove :: (widget: *Active_Widget) {
-    if widget == active_widget  active_widget = null;
+    if widget == active_widget  {
+        deactivate(widget);
+        active_widget = null;
+    }
 }
 
 active_widget_deactivate_all :: (except: *Active_Widget = null) {
@@ -28,9 +31,10 @@ active_widget_deactivate_all :: (except: *Active_Widget = null) {
 #scope_module
 Active_Widget :: struct {
     widget_type: Type;
+
     deactivate\         _proc: (w: *Active_Widget);
-    event\              _proc: (w: *Active_Widget, event: Event);
-    check_for_activation_proc: (w: *Active_Widget, events: []Event);
+    serial_events\      _proc: (w: *Active_Widget, events: [] Event);
+    check_for_activation_proc: (w: *Active_Widget, event: Event) -> bool;
 
     last_getrect_frame: u64;
     is_on_state_stack := false;
@@ -39,6 +43,7 @@ Active_Widget :: struct {
     cosmetic_dt:      float32;
 
     window: Window_Type;
+    exists_on_occluder: *Active_Widget; // For example, if we are drawn on a Subwindow, this is assigned to that subwindow, so that we know we aren't occluded by queries that hit that subwindow.
 }
 
 // @Threadsafety?
@@ -53,12 +58,13 @@ start_using_state :: (widget: *Active_Widget) {
     window := context.getrect_current_window;
     assert(window != WT.INVALID_WINDOW);
     widget.window = window;
-    
+    widget.exists_on_occluder = occluder_being_drawn;
+
     if (widget.last_getrect_frame == current_getrect_frame) && !drawing_popups && !disable_the_duplicate_widget_error { // If drawing popups, we give ourselves license to get the same widget again.
         // For now we report an error. Later we can think about making this actually work in most cases
         // (just by remembering the highest integer identifier per widget, and generating a new widget
         // using an incremented identifier).
-        
+
         if !gave_widget_location_error {
             gave_widget_location_error = true;
 
@@ -73,7 +79,7 @@ start_using_state :: (widget: *Active_Widget) {
             }
         }
     }
-    
+
     // :CosmeticTimer
     // last_update_time is here to compute cosmetic_dt. cosmetic_dt is different from the per-frame dt,
     // since a button may appear and disappear due to the user switching between screens, etc -- a button
@@ -88,9 +94,9 @@ start_using_state :: (widget: *Active_Widget) {
     } else {
         widget.cosmetic_dt = current_dt;
     }
-    
+
     widget.last_update_time = current_time;
-    
+
     widget.last_getrect_frame = current_getrect_frame;
     array_add(*state_stack, widget);
     widget.is_on_state_stack = true;

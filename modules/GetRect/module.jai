@@ -113,10 +113,12 @@ Per_Window_State :: struct {
     window: Window_Type;
     mouse_x_float, mouse_y_float: float;
 }
-this_frame_per_window_states: [..]Per_Window_State;
-last_frame_per_window_states: [..]Per_Window_State;
+
+this_frame_per_window_states: [..] Per_Window_State;
+last_frame_per_window_states: [..] Per_Window_State;
 
 mouse_x, mouse_y: s32;
+
 mouse_x_float, mouse_y_float: float;
 mouse_delta_x_float, mouse_delta_y_float: float;
 
@@ -124,7 +126,7 @@ current_tooltip: Tooltip;
 active_tooltip:  Tooltip;
 
 current_getrect_frame: u64;  // Wrapping. Just so we have a unique ID per frame!
-current_occluder: *Active_Widget;  // Null if no occluder.
+occluder_under_the_cursor: *Active_Widget;  // Null if no occluder.
 
 mouse_button_left_state:  Key_Current_State;
 mouse_button_right_state: Key_Current_State;
@@ -136,8 +138,13 @@ last_current_time := FLOAT64_INFINITY;
 current_time: float64;
 current_dt:   float;
 
+last_left_click_time: float64;
+left_click_dt := FLOAT32_INFINITY;
+
 render_target_width:  s32;
 render_target_height: s32;
+
+current_subwindow: *Subwindow_State;
 
 map_radiobox_full:  *Texture;
 map_radiobox_empty: *Texture;
@@ -271,63 +278,78 @@ cut_left  :: (rect: Rect, amount: float, margin := 0.0) -> (left: Rect, remainde
     return left, remainder;
 }
 
-cut_right :: (rect: Rect, amount: float) -> (right: Rect, remainder: Rect) {
+cut_right :: (rect: Rect, amount: float, margin := 0.0) -> (right: Rect, remainder: Rect) {
+    m := margin * .5;
     remainder := rect;
 
-    remainder.w -= amount;
+    remainder.w -= amount + m;
 
     right := rect;
-    right.x = remainder.x + remainder.w;
-    right.w = amount;
+    right.x = remainder.x + remainder.w + margin;
+    right.w = amount - m;
 
     return right, remainder;
 }
 
-cut_bottom :: (rect: Rect, amount: float) -> (bottom: Rect, remainder: Rect) {
+cut_bottom :: (rect: Rect, amount: float, margin := 0.0) -> (bottom: Rect, remainder: Rect) {
     remainder := rect;
 
-    remainder.h -= amount;
-    remainder.y += amount;
+    m := margin * .5;
+    remainder.h -= amount + m;
+    remainder.y += amount + m;
 
     bottom := rect;
-    bottom.h = amount;
+    bottom.h = amount - m;
 
     return bottom, remainder;
 }
 
-cut_top    :: (rect: Rect, amount: float) -> (top: Rect, remainder: Rect) {
+cut_top :: (rect: Rect, amount: float, margin := 0.0) -> (top: Rect, remainder: Rect) {
+    m := margin * .5;
     remainder := rect;
 
-    remainder.h -= amount;
+    remainder.h -= amount + m;
 
     top := rect;
-    top.h = amount;
-    top.y = remainder.y + remainder.h;
+    top.y = remainder.y + remainder.h + margin;
+    top.h = amount - m;
 
     return top, remainder;
 }
 
+Status_Flags_Ignore :: enum_flags u8 {
+    NOTHING;
+    LEFT_CLICK;
+    TOOLTIP;
+    SCISSOR;
+}
 
-get_status_flags :: (r: Rect, cares_about_left_click := true) -> Status_Flags {
+get_status_flags :: (r: Rect, widget_if_querying_outside_of_render_time: *Active_Widget = null, ignore := Status_Flags_Ignore.NOTHING) -> Status_Flags {
+    status: Status_Flags;
+
+    process_tooltip := !(ignore & .TOOLTIP);
+    defer if process_tooltip  tooltip("");
+
     x := mouse_x_float;
     y := mouse_y_float;
 
-    status: Status_Flags;
-    if !is_visible_in_scissor(x, y) return status;
+    if !(ignore & .SCISSOR) && !is_visible_in_scissor(x, y)
+        return status;
 
     // We use implicit z value, so we don't have to pass it everywhere.
     // If that turns into some kind of OpenGL situation, we'll make it explicit later.
-    if (!events_occluded()) && !(active_widget && active_widget_is_grabbing) {  // What if we are the active widget? @Cleanup
+    if (!events_occluded(widget_if_querying_outside_of_render_time)) && !(active_widget && active_widget_is_grabbing) {  // What if we are the active widget? @Cleanup
         if is_inside(x, y, r) {
             status |= .OVER;
 
-            active_tooltip  = current_tooltip;
+            if process_tooltip  active_tooltip  = current_tooltip;
 
             // Sometimes we want status flags to know if we are over a region, but that region
             // contains user content, so we don't want to intercept clicks and count them as
             // being active... for example, the interior of a scrollable region. This way, if the user
             // clicks on the interior of a scrollable region, and no other active widget is hit,
             // we know to close active widgets.
+            cares_about_left_click := !(ignore & .LEFT_CLICK);
             if cares_about_left_click && (mouse_button_left_state & .START) {
                 status |= .PRESSED;
                 some_widget_received_left_mouse_button = true;
@@ -425,18 +447,20 @@ ui_get_button_state :: (key: Key_Code) -> Key_Current_State {
     return state;
 }
 
-windows_per_frame_update :: ()
-{
+windows_per_frame_update :: () {
     Swap(*last_frame_per_window_states, *this_frame_per_window_states);
     this_frame_per_window_states.count = 0;
 }
 
-switch_window :: (window: Window_Type, _render_target_width: s32, _render_target_height: s32) -> (background_occluded: bool) {
+switch_window :: (window: Window_Type, _render_target_width: s32, _render_target_height: s32) -> (background_occluded: bool, is_active: bool) {
     assert(state_stack.count == 0);
     context.getrect_current_window = window;
 
-    w := cast(float)_render_target_width;
-    h := cast(float)_render_target_height;
+    render_target_width  = max(_render_target_width, 1);
+    render_target_height = max(_render_target_height, 1);
+
+    w := cast(float)render_target_width;
+    h := cast(float)render_target_height;
     diagonal := sqrt(w*w+h*h);
 
     if !global_rounding_radius_in_pixels_is_set {
@@ -484,13 +508,20 @@ switch_window :: (window: Window_Type, _render_target_width: s32, _render_target
         }
     }
 
-    events_per_window_update(window);
+    //
+    // Right now, we have swapped the order of occlusion_per_window_update() and events_per_window_update()
+    // because if occluder_under_the_cursor is set to null, it confuses some activation/event visibility code.
+    // This will produce the wrong result if some widget changes occluder order inside events_per_window_update()
+    // and we want that to happen on the same frame. But, currently this does not happen. But we perhaps
+    // should think about whether we want a more-explicit design here with more stages.
+    //
     occlusion_per_window_update(window);
+    events_per_window_update(window);
 
-    return current_occluder && (current_occluder.window == window);
+    return occluder_under_the_cursor && (occluder_under_the_cursor.window == window), active_widget != null;
 }
 
-ui_per_frame_update :: (window: Window_Type, _render_target_width: s32, _render_target_height: s32, _current_time: float64) -> (background_occluded: bool) {
+ui_per_frame_update :: (window: Window_Type, _render_target_width: s32, _render_target_height: s32, _current_time: float64) -> (background_occluded: bool, is_active: bool) {
     assert(state_stack.count == 0);
 
     // If the active widget was not drawn, deactivate it.
@@ -518,16 +549,28 @@ ui_per_frame_update :: (window: Window_Type, _render_target_width: s32, _render_
     last_current_time = current_time;
     current_time      = _current_time;
 
-    render_target_width  = _render_target_width;
-    render_target_height = _render_target_height;
+    if mouse_button_left_state & .START {
+        left_click_dt = cast(float) (current_time - last_left_click_time);
+        if left_click_dt == current_dt {
+            // The clicks occured two frames in a row, so we'll signify that by
+            // returning 0 (and if the user is doing the simple thing of checking
+            // for double-click by comparing left_click_dt < some click interval,
+            // they will correctly register a double-click).
+            left_click_dt = 0;
+        }
+        last_left_click_time = current_time;
+    }
+
+    render_target_width  = max(_render_target_width, 1);
+    render_target_height = max(_render_target_height, 1);
 
     popups\  _per_frame_update();
     occlusion_per_frame_update();
     windows\ _per_frame_update();
     events\  _per_frame_update();
 
-    occluded := switch_window(window, _render_target_width, _render_target_height);
-    return occluded;
+    occluded, is_active := switch_window(window, _render_target_width, _render_target_height);
+    return occluded, is_active;
 }
 
 is_visible_in_scissor :: (x: float, y: float) -> bool {
@@ -756,9 +799,10 @@ has_focus :: (rect: Rect) -> bool {
 
 #scope_module
 
-v2 :: make_vector2;
-v3 :: make_vector3;
-v4 :: make_vector4;
+// @TODO ditch these and change to struct literals or rgb/rgba
+v2 :: xy;
+v3 :: xyz;
+v4 :: xyzw;
 
 move_toward :: (a: float, b: float, amount_increasing: float, amount_decreasing := -1.0) -> float {
     if a > b {
@@ -790,7 +834,7 @@ move_toward :: (a_pointer: *float, target: float, dt: float, rate_up: float, rat
     }
 }
 
-#if OS == .PS5 {
+#if IS_CROSS_COMPILING {
     // Hopefully temporary workaround for limitations of #run,host
     // Specifically, that lambdas aren't run in the scope of the current module.
     memory_radiobox_full, memory_radiobox_empty, memory_checkbox_full, memory_checkbox_empty, memory_default_font, memory_mode_circle, memory_mode_hsv, memory_mode_rgb, memory_mode_numbers :: #run,host -> string, string, string, string, string, string, string, string, string {
@@ -930,17 +974,51 @@ events_per_window_update :: (window: Window_Type) {
     // but we check every widget each time. This can of course be sped way up.
 
     // @Speed: Now we are iterating over every single widget!
+
+    // We want to make sure that we can handle several switches of input event,
+    // mid-frame, when frame rates are low.
+
+    // @Incomplete: Make this a local temporary pool...
+
+    activation_proc_widgets: [..] *Active_Widget;
+    defer free(activation_proc_widgets.data);
+
     for state_table {
         if !it.check_for_activation_proc continue;
         if it.window != window continue;
 
-        it.check_for_activation_proc(it, events_to_handle_this_frame);
+        array_add(*activation_proc_widgets, it);
     }
 
-    if active_widget && active_widget.event_proc && active_widget.window == window {
-        for event: events_to_handle_this_frame  {
-            active_widget.event_proc(active_widget, event);
-            if !active_widget || !active_widget.event_proc break;
+    if activation_proc_widgets {
+        // Activation may switch multiple times during the frame.
+        // Each time it does, pass the events to the last-active widget.
+
+        // @Incomplete: Make this a local temporary pool...
+        accrued_events: [..] Event;
+        defer free(accrued_events.data);
+
+        for event, event_index: events_to_handle_this_frame {
+            for activation_proc_widgets {
+                activated := it.check_for_activation_proc(it, event);
+                if activated {
+                    // Flush events.
+                    if accrued_events && active_widget && active_widget.serial_events_proc {
+                        active_widget.serial_events_proc(active_widget, accrued_events);
+                        accrued_events.count = 0;
+                    }
+
+                    active_widget_add(it);
+                }
+            }
+
+            array_add(*accrued_events, event);
+        }
+
+        if accrued_events {
+            if active_widget && active_widget.window == window && active_widget.serial_events_proc {
+                active_widget.serial_events_proc(active_widget, accrued_events);
+            }
         }
     }
 }

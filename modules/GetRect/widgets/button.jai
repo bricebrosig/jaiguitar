@@ -13,7 +13,7 @@ update_action_durations :: (state: *Button_State, theme: *Button_Theme, begin: b
         factor    := (state.action_duration / denom);
         pressed_factor = 1 - factor;
         if pressed_factor < 0  state.action_duration = -1;
-        
+
         Clamp(*pressed_factor, 0, 1);
         pressed_factor *= pressed_factor;
     }
@@ -21,7 +21,7 @@ update_action_durations :: (state: *Button_State, theme: *Button_Theme, begin: b
     if state.action_duration_2 >= 0 {  // Some juice when you push the button.
         state.action_duration_2 += dt;
     }
-    
+
     return pressed_factor;
 }
 
@@ -37,16 +37,16 @@ update_production_value_button :: (r: Rect, changed: bool, state: *Button_State,
             dt = widget.cosmetic_dt;
         }
     }
-    
+
     update_over_state(state, theme, status, dt);
-    
+
     pressed_factor := update_action_durations(state, theme, changed, dt);
 
     blend_factor := sin(TAU * state.over_duration * .5);
     blend_factor += 1;
     blend_factor *= .5;
     Clamp(*blend_factor, 0, 1);
-    
+
     STROBE_BASE   :: .6;
     STROBE_HEIGHT :: .4;
 
@@ -75,51 +75,51 @@ update_over_state :: (state: *Button_State, theme: *Button_Theme, status: Status
     }
 }
 
+core_draw_button_label :: (r: Rect, text: string, state: *Button_State, theme: *Button_Theme) {
+    color := theme.text_color;
+    color = lerp(color, theme.text_color_over,    state.over_factor);
+    color = lerp(color, theme.text_color_pressed, state.pressed_factor);
+
+    if color.w {
+        label_theme := theme.label_theme;  // @Cleanup?
+        label_theme.text_color = color;
+
+        font := label_theme.font;
+        if !font {
+            pixels := max(r.h*.65, .1);
+            font = get_default_font_at_size(pixels);
+            label_theme.font = font;
+        }
+
+        off_t := state.down_effect_t*state.down_effect_t;  // Bias toward less offset, to kinda sync it better with the color offsets... make it look like it springs back faster.
+        sx := em(theme.text_offset_down.x, font) * off_t;
+        sy := em(theme.text_offset_down.y, font) * off_t;
+        _r := r;
+        _r.x += sx;
+        _r.y += sy;
+        _r.x += state.frame_pixels;
+        _r.w -= 2*state.frame_pixels;
+
+        label(_r, text, *label_theme);
+    }
+}
 
 core_draw_button :: (r: Rect, text: string, state: *Button_State, status: Status_Flags, theme: *Button_Theme, texture: *Texture) {
     if !theme  theme = *default_overall_theme.button_theme;
 
-    changed := cast(bool)(status & .PRESSED); 
+    changed := cast(bool)(status & .PRESSED);
     update_production_value_button(r, changed, state, status, theme);
-    
+
     if !is_visible_in_scissor(r) return;
     if theme.properties & .DO_NOT_DRAW      return;
-    
+
     surface_color, frame_color, frame_thickness := get_colors_and_thickness_for_button(theme, state);
     draw_procs.set_shader_for_color(true);
 
-    frame_pixels := rounded_rectangle(r, theme.rectangle_shape, surface_color, frame_color, frame_thickness_override = frame_thickness);
-    
-    if text {
-        color := theme.text_color;
+    state.frame_pixels = rounded_rectangle(r, theme.rectangle_shape, surface_color, frame_color, frame_thickness_override = frame_thickness);
 
-        color = lerp(color, theme.text_color_over,    state.over_factor);
-        color = lerp(color, theme.text_color_pressed, state.pressed_factor);
+    if text  core_draw_button_label(r, text, state, theme);
 
-        if color.w {
-            label_theme := theme.label_theme;  // @Cleanup?
-            label_theme.text_color = color;
-
-            font := label_theme.font;
-            if !font {
-                pixels := max(r.h*.65, .1);
-                font = get_default_font_at_size(pixels);
-                label_theme.font = font;
-            }
-            
-            off_t := state.down_effect_t*state.down_effect_t;  // Bias toward less offset, to kinda sync it better with the color offsets... make it look like it springs back faster.
-            sx := em(theme.text_offset_down.x, font) * off_t;
-            sy := em(theme.text_offset_down.y, font) * off_t;
-            _r := r;
-            _r.x += sx;
-            _r.y += sy;
-            _r.x += frame_pixels;
-            _r.w -= 2*frame_pixels;
-            
-            label(_r, text, *label_theme);
-        }
-    }
-    
     if texture {
         color := theme.text_color;
 
@@ -142,7 +142,7 @@ core_draw_button :: (r: Rect, text: string, state: *Button_State, status: Status
                 v0 = 1;
                 v1 = 0;
             }
-            
+
             u0 := v2(0, v0);
             u1 := v2(1, v0);
             u2 := v2(1, v1);
@@ -165,15 +165,19 @@ button :: (r: Rect, text: string, theme: *Button_Theme = null, identifier: s64 =
 
     state.status = status;
     state.rect   = r;
-    
+
     released := false;
-    
+
     result := false;
     if theme.properties & .TOGGLE {
         if status & .PRESSED {
             state.pressed = !state.pressed;
             result = state.pressed;
-            log("~~~~~ result set to %, site A\n", result);
+            // NOTE(Charles): There seemed to be no way (for a user) to tell that a a toggle button has just changed
+            // from toggled on, to toggled off. To achieve what I wanted I changed it so was_just_pressed is true
+            // when turned on, was_just_released is true when turned off.
+            // This means there is no way to do stuff on release of the button when changing state.
+            released = !result;
             active_widget_deactivate_all();
         }
     } else {
@@ -191,19 +195,19 @@ button :: (r: Rect, text: string, theme: *Button_Theme = null, identifier: s64 =
             }
         }
     }
-    
+
     if state.pressed {
         // This just tells core_draw_button that we are pressed. @Cleanup, it is kinda dumb?
         status |= .DOWN;
     }
-    
+
     core_draw_button(r, text, state, status, theme, texture);
 
 
     if theme.draw_callback {
         theme.draw_callback(r, text, theme, texture, state);
     }
-    
+
     return result, state, released;
 }
 
@@ -221,7 +225,7 @@ get_colors_and_thickness_for_button :: (theme: *Button_Theme, state: *Button_Sta
         frame_thickness = lerp(frame_thickness, theme.frame_thickness_down, state.down_effect_t);
         frame_thickness = lerp(frame_thickness, theme.frame_thickness_flash, state.pressed_factor);
     }
-    
+
     frame_color := theme.frame_color;
     frame_color = lerp(frame_color, theme.frame_color_over,  state.over_factor);
     frame_color = lerp(frame_color, theme.frame_color_down,  state.down_effect_t);
@@ -255,18 +259,18 @@ rounded_rectangle :: (r: Rect, shape: Rectangle_Shape, color: Vector4, frame_col
 */
 
     radius_pixels := get_roundedness_for_rect(r, shape.roundedness_type, shape.roundedness, global_rounding_radius_in_pixels, .5);
-    
+
     draw_procs.set_shader_for_color(true);
     frame_pixels := get_float_parameter(r, shape.frame_thickness_type, shape.frame_thickness, global_frame_thickness_in_pixels);
     shortest := min(r.w, r.h);
     Clamp(*frame_pixels, 0, shortest*.5);
-    
+
     if (frame_pixels > 0) && (frame_pixels < 1) frame_pixels = 1;  // Give them at least 1 pixel if they are asking for a frame...
     frame_pixels = floor(frame_pixels + .5);
 
     if !frame_color.w  frame_pixels = 0;  // Kill drawing of the frame.
     if (color.w == 0) && (frame_pixels == 0) return 0, 0;  // Early out and do not draw!
-    
+
     flags := shape.rounding_flags;
     if radius_pixels == 0 {
         flags = 0;  // Just don't do corners, but, go do the rest of the code, because we want to draw frames etc and don't want to dupe that code here.
@@ -278,7 +282,7 @@ rounded_rectangle :: (r: Rect, shape: Rectangle_Shape, color: Vector4, frame_col
     // i0..i3: inside  vertices, of the interior quad.
     // o0..o7: outside vertices, that protrude out like flaps.
     // f0..f7: frame   vertices, recessed by frame_pixels from the outside vertices.
-    
+
     p0, p1, p2, p3 := get_quad(r, snap_coordinates=true);
 
     i0 := p0 + v2( extra_w,  extra_h);
@@ -311,9 +315,9 @@ rounded_rectangle :: (r: Rect, shape: Rectangle_Shape, color: Vector4, frame_col
         draw_procs.immediate_quad(o7, i0, i3, o6, color);
         draw_procs.immediate_quad(i0, i1, i2, i3, color);
     }
-    
+
     f0, f1, f2, f3, f4, f5, f6, f7: Vector2 = ---;
-    
+
     if frame_pixels {
         f0 = o0;
         f1 = o1;
@@ -339,7 +343,7 @@ rounded_rectangle :: (r: Rect, shape: Rectangle_Shape, color: Vector4, frame_col
         draw_procs.immediate_quad(f5, f4, o4, o5, frame_color);
         draw_procs.immediate_quad(o7, f7, f6, o6, frame_color);
     }
-    
+
     denom := shape.pixels_per_edge_segment;
     if denom <= 0 {
         denom = 4.0;  // Fail over to some value. Who knows if this is a good idea.
@@ -349,13 +353,13 @@ rounded_rectangle :: (r: Rect, shape: Rectangle_Shape, color: Vector4, frame_col
     if num_segments < 1  num_segments = 1;
 
     dtheta := TAU * .25 * (1 / cast(float) num_segments);
-    
+
     // @Speed: Vector3 stuff.
     i0_3 := to_vec3(i0);
     i1_3 := to_vec3(i1);
     i2_3 := to_vec3(i2);
     i3_3 := to_vec3(i3);
-    
+
     for i: 0..num_segments - 1 {
         // @Speed: Record old theta and re-use.
         theta0 := dtheta * i;
@@ -432,7 +436,7 @@ rounded_rectangle :: (r: Rect, shape: Rectangle_Shape, color: Vector4, frame_col
             draw_procs.immediate_quad(p0, o0, f0, f70, frame_color);
         }
     }
-    
+
     if !(flags & .SOUTHEAST) {
         draw_procs.immediate_quad(o1, p1, o2, i1, color);
 
@@ -442,7 +446,7 @@ rounded_rectangle :: (r: Rect, shape: Rectangle_Shape, color: Vector4, frame_col
             draw_procs.immediate_quad(f21, p1, o2, f2, frame_color);
         }
     }
-    
+
     draw_procs.immediate_flush();
 
     return frame_pixels, radius_pixels;  // Sometimes used in scissoring.
@@ -454,13 +458,13 @@ Button_Theme :: struct {
     using label_theme: Label_Theme;
 
     rectangle_shape:   Rectangle_Shape;
-    
+
     surface_color            := Vector4.{.08, .08, .08, 1.0};
     surface_color_over       := Vector4.{.15, .15, .20, 1.0};
-    
+
     surface_color_flash      := Vector4.{.60, .77, .62, 1.0};
     surface_color_down       := Vector4.{.28, .28, .38, 1.0};  // When held down.
-    
+
     text_color                = Vector4.{.82, .82, .82, 1.0};  // (Inherited from Label_Theme).
     text_color_over          := Vector4.{.95, .95, .95, 1.0};
     text_color_pressed       := Vector4.{.99, .99, .99, 1.0};  // @Cleanup: Should change this to "text_color_down".
@@ -472,29 +476,29 @@ Button_Theme :: struct {
     frame_thickness_down     := .05;
     frame_thickness_flash    := .07;
     enable_variable_frame_thickness := false;
-    
+
     frame_color              := Vector4.{.40, .40, .50, 1.0};
     frame_color_over         := Vector4.{.55, .55, .45, 1.0};
     frame_color_flash        := Vector4.{.99, .99, .65, 1.0};
     frame_color_down         := Vector4.{.75, .75, .55, 1.0};
-        
+
     press_duration       := 0.7;    // The flash when you press the button.
 
     over_fade_in_speed   := 10.0;  // Higher is faster; 10 == 1/10 second for full fade in.
     over_fade_out_speed  := 4.0;   // 4 == 1/4 second for full fade in.
-    
+
     down_fade_in_speed   := 12.0;
     down_fade_out_speed  := 4.0;
-        
+
     highlight_lighten_parameter := .15; // For lighter theme colors, you might want more ligten and less darken.
     highlight_darken_parameter  := .6;
-    
+
     alpha_scale := 1.0;  // @Incomplete: This does not yet do anything!
 
     texture_scale := 1.0;  // Relative to the size of the button, if a texture is being drawn.
 
     draw_callback: (r: Rect, text: string, theme: *Button_Theme, texture: *Texture, state: *Button_State);
-    
+
     properties: enum u64 {
         TOGGLE              :: 0x1;
         TEXTURE_LEFT_HANDED :: 0x2;
@@ -509,7 +513,9 @@ Button_State :: struct #type_info_none {
 
     status: Status_Flags;
     rect:   Rect;
-    
+
+    frame_pixels: float;
+
     over_duration := 0.0;
     over_effect_t := 0.0;
 
@@ -521,7 +527,7 @@ Button_State :: struct #type_info_none {
 
     over_factor    := 0.0;
     pressed_factor := 0.0;
-    
+
     pressed := false;
 
     user_data_float: float;

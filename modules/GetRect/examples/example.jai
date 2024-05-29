@@ -30,6 +30,8 @@ last\  _time: float64;
 
 scroll_value: float;
 scroll_value_dragdrop_region: float;
+horizontal_scroll_value: float;
+vertical_scroll_value: float;
 
 // Data values that we manipulate with the widgets:
 
@@ -137,7 +139,7 @@ begins_with_count :: (str: string, prefix: string) -> int {
     return prefix.count;
 }
 
-auto_complete_teas :: (input: string, data: *void) -> (results: [] string, longest_match_length: int) {
+auto_complete_teas_proc :: (input: string, data: *void) -> (results: [] string, longest_match_length: int) {
     results: [..] string;
 
     longest_match_length := 0;
@@ -153,6 +155,8 @@ auto_complete_teas :: (input: string, data: *void) -> (results: [] string, longe
 
     return results, longest_match_length;
 }
+
+auto_complete_teas := Auto_Complete.{auto_complete_teas_proc, null};
 
 main :: () {
     #if OS == .WINDOWS {
@@ -216,7 +220,7 @@ main :: () {
 
     quit := false;
     while !quit {
-        current_time = get_time();
+        current_time = seconds_since_init();
         dt := cast(float)(current_time - last_time);
         Clamp(*dt, 0, 0.1);
         last_time = current_time;
@@ -346,7 +350,7 @@ draw_one_frame :: (dt: float) {
     // The teas:
     r = get_rect(3*k, 7*k, 3*k, button_font.character_height*1.35);
     text_theme.alignment = .Left;
-    action_t, new_text_t := text_input(r, string_t, *text_theme, auto_complete=auto_complete_teas, null);
+    action_t, new_text_t := text_input(r, string_t, *text_theme, auto_complete=auto_complete_teas);
     if action_t & .ENTERED  modify_string(*string_t, new_text_t);
 
     {
@@ -536,7 +540,7 @@ draw_one_frame :: (dt: float) {
                 subwindow_info_text.draw                 = draw_subwindow_text;
                 subwindow_info_text.title_text           = "Text";
             }
-            
+
             {
                 aspect := get_desired_aspect_ratio(*my_theme.color_picker_theme);
                 r = get_rect(6.5*k, 3*k, 3*k, 3*k/aspect);
@@ -545,7 +549,7 @@ draw_one_frame :: (dt: float) {
                 subwindow_info_circle.title_text           = "Color Picker";
                 subwindow_info_circle.fixed_aspect_ratio   = aspect;
             }
-            
+
             {
                 aspect := get_desired_aspect_ratio(*my_theme.color_animation_editor_theme);
                 r = get_rect(cast(float) window_width - 10.1*k, .1*k, 10*k, 10*k/aspect);
@@ -554,14 +558,29 @@ draw_one_frame :: (dt: float) {
                 subwindow_info_color_animation_editor.title_text           = "Color Animation";
                 subwindow_info_color_animation_editor.fixed_aspect_ratio   = aspect;
             }
-            
+
             subwindows_initted = true;
         }
+
+        // Check Boxes:
+        subwindow_checkbox_r := Rect.{14*k, 7*k, 2.2*k, button_height};
+        subwindow_checkbox :: (subwindow_info: *Subwindow_Info) #expand {
+            if base_checkbox(subwindow_checkbox_r, subwindow_info.title_text, subwindow_info.open, *checkbox_theme, identifier=cast(int)subwindow_info) {
+                subwindow_info.open = !subwindow_info.open;
+                subwindow_info.wants_a_raise = true;
+            }
+            subwindow_checkbox_r.y -= button_height + vertical_pad;
+        }
+        subwindow_checkbox(*subwindow_info_text);
+        subwindow_checkbox(*subwindow_info_circle);
+        subwindow_checkbox(*subwindow_info_color_animation_editor);
 
         theme := my_theme.subwindow_theme;
 
         if subwindow_info_text.open {  // The Subwindow starts open, but pressing the Close button can close it.
+            theme.resize_controls |= .SNAP;
             subwindow_state := add_subwindow(*subwindow_info_text, *theme);
+            theme.resize_controls &= ~.SNAP;
         }
 
         if subwindow_info_circle.open {  // The Subwindow starts open, but pressing the Close button can close it.
@@ -592,6 +611,7 @@ draw_one_frame :: (dt: float) {
 
     draw_popups();  // This draws Subwindows as well.
 
+
     //
     // Swap buffers!
     //
@@ -603,18 +623,59 @@ draw_subwindow_text :: (r: Rect, data: *void) {
     font := story_font;
     lines := split(TEXT_FIELD_1, "\n");
 
+    label_rect, story_rect := cut_bottom(r, 1.2 * font.default_line_spacing);
+
+    {
+        label_theme := my_theme.label_theme;
+        label_theme.text_color.w /= 4;
+        label_theme.font = button_font;
+        label(label_rect, "Try shift+scrollwheel", *label_theme);
+    }
+
     K :: .5;
     color := Vector4.{K, K, K, 1};
 
-    xpad := floor(font.default_line_spacing * .5 + .5);
+    pad := floor(font.default_line_spacing * .5 + .5);
 
-    x := r.x + xpad;
-    y := r.y + r.h - cast(float) font.default_line_spacing;
-    for lines {
-        trimmed := trim_right(it, " \t\r\n");
-        Simp.draw_text(font, xx x, xx y, trimmed, color);
-        y -= cast(float) font.default_line_spacing;
+    vertical_theme := my_theme.scrollable_region_theme;
+    vertical_theme.margin_flags = 0;
+    vertical_theme.region_background.frame_color.w = 0;
+
+    horizontal_theme := vertical_theme;
+    {
+        using horizontal_theme;
+        direction = .HORIZONTAL;
+        scrollbar_nib_theme.rectangle_shape.frame_thickness_type = .RELATIVE_TO_HEIGHT;
+        scrollbar_nib_theme.rectangle_shape.roundedness_type =     .RELATIVE_TO_HEIGHT;
+        region_background.shape.roundedness_type =                 .RELATIVE_TO_HEIGHT;
+        scrollbar_background.shape.roundedness_type =              .RELATIVE_TO_HEIGHT;
+        region_background.shape.rounding_flags =    .NORTHWEST | .NORTHEAST;
+        scrollbar_background.shape.rounding_flags = .SOUTHWEST | .SOUTHEAST;
     }
+
+    horizontal_region, inside_horizontal := begin_scrollable_region(story_rect, *horizontal_theme);
+    vertical_region, inside := begin_scrollable_region(inside_horizontal, *vertical_theme);
+
+    scrollbar_width := inside_horizontal.w - inside.w;
+
+    x := inside.x + pad - horizontal_scroll_value;
+    y := inside.y + inside.h + vertical_scroll_value;;
+    max_width := 0;
+    for lines {
+        y -= cast(float) font.default_line_spacing;
+        trimmed := trim_right(it, " \t\r\n");
+        width := Simp.draw_text(font, xx x, xx y, trimmed, color);
+        if width > max_width  max_width = width;
+    }
+
+    min_y := y + cast(float) font.default_line_spacing - pad;
+    max_x := x + max_width + scrollbar_width + pad;
+
+    end_scrollable_region(vertical_region, 0, min_y, *vertical_scroll_value);
+    end_scrollable_region(horizontal_region, max_x, 0, *horizontal_scroll_value);
+
+    subwindow_info_text.snap_to_size.x = max_x - x + pad;
+    subwindow_info_text.snap_to_size.y = inside.y - min_y + r.h; // inside.h cancels itself
 }
 
 draw_subwindow_circle :: (r: Rect, data: *void) {

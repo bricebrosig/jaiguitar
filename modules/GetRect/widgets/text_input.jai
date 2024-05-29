@@ -25,83 +25,63 @@ Text_Result_Action :: enum_flags u32 {
     TEXT_MODIFIED :: 0x4;
 }
 
-text_input :: (_r: Rect, inert_text: string, theme: *Text_Input_Theme, identifier: s64 = 0, loc := #caller_location, input_action : Text_Input_Action = 0, auto_complete: Auto_Complete = null, auto_complete_data: *void = null) -> (result_action: Text_Result_Action, new_string: string, state: *Text_Input_State) {
+set_last_inert_text :: (state: *Text_Input_State, text: string) {
+    // Normally you do not call this manually, but some higher-level widgets
+    // like Slider draw the inert text themselves, so it doesn't get set normally.
+    // This is a way for them to make up for that.
+
+    if state.last_inert_text == text return;
+    free(state.last_inert_text);
+    state.last_inert_text = copy_string(text);
+}
+
+text_input :: (_r: Rect, inert_text: string, theme: *Text_Input_Theme, identifier: s64 = 0, loc := #caller_location, input_action : Text_Input_Action = 0, auto_complete: Auto_Complete = .{}) -> (result_action: Text_Result_Action, new_string: string, state: *Text_Input_State) {
     r := _r;
     hash  := get_hash(loc, identifier);
-    
+
     state, created := find_or_create_state(Text_Input_State, hash);
     defer stop_using_state(state);
-    if !state.text.data state.text.data  = state.input_buffer.data;
+    if !state.text.data  state.text.data = state.input_buffer.data;
 
-    {
-        // :DisplayTextLifetime
-        //
-        // Originally, the design was that 'inert_text' could be a static string, or a temporarily-allocated one
-        // that only lasts for the duration of the call to text_input(). But then we restructured event handling,
-        // which needs to do stuff outside text_input(), at a totally different time. Of the things it needs to do
-        // is, when activating the input on a left click, to set the text to whatever 'inert_text' was. So we need
-        // to remember this string now, past the return from text_input. We could tell the user the lifetime of
-        // that string needs to be longer than the widget, but this is unreasonable (they can't e.g. change the string
-        // and deallocate the old copy). So we copy it, bleah.
-        // 
-        state.maintain_text_after_escape = theme.maintain_text_after_escape; // Copy this so we don't need the theme pointer to reason about things.
+    set_last_inert_text(state, inert_text);
 
-        if state.last_inert_text != inert_text {
-            free(state.last_inert_text);
-            state.last_inert_text = copy_string(inert_text);
-        }
+    // If we have buffered events, check those.
+    if state.buffered_events {
+        for state.buffered_events handle_event(state, it);
+        state.buffered_events.count = 0;
     }
-    
+
     if state.do_active_widget_deactivate_all {
         active_widget_deactivate_all(state);
         state.do_active_widget_deactivate_all = false;
     }
 
-    start_inputting    := false;
-    do_start_selecting := false;  // :Nicer
-    
-    if input_action & .ACTIVATE { // :Nicer
-        start_inputting = true;
+    if !state.active && input_action & .ACTIVATE { // :Nicer
+        activate(state);
     } else if state.active && (state.disabled || (input_action & .DEACTIVATE)) {
-        deactivate(state);
+        active_widget_remove(state);
     }
 
-    
     font := theme.font;
     if !font  font = get_default_font_at_size(r.h *.65);
 
     status := get_status_flags(r);
 
-    if start_inputting && !state.active {  // :Nicer
-        // This didn't happen due to a click, so don't set the click timer.
-        activate(state);
-    }
-
-    if do_start_selecting start_selecting(state);  // When the input is already active and rendering, it will handle a left-press and do this itself. But we are bringing it from nothing, so it didn't get that event dispatch!
-
     body_rect := r;
     state.rect = body_rect;
-    
-    result_action: Text_Result_Action;
-    if state.pending_result_actions {
-        result_action |= state.pending_result_actions;
-        state.pending_result_actions = 0;
-    }
 
-    if result_action & .ESCAPED {
-        reset(state);
-    }
-    
+    result_action := state.pending_result_actions;
+    state.pending_result_actions = 0;
+
     if state.active {
-        text_input_theme := << theme;
+        text_input_theme := theme.*;
         if !text_input_theme.font  text_input_theme.font = font;
 
-        if auto_complete {
-            if (state.auto_complete != auto_complete) || (state.auto_complete_data != auto_complete_data) reset_auto_complete(state);
-            state.auto_complete      = auto_complete;
-            state.auto_complete_data = auto_complete_data;
+        if state.auto_complete.proc != auto_complete.proc || state.auto_complete.data != auto_complete.data {
+            reset_auto_complete(state);
+            state.auto_complete = auto_complete;
         }
-        
+
         draw(state, body_rect, *text_input_theme, identifier, loc);
 
         if result_action & .ENTERED {
@@ -109,30 +89,30 @@ text_input :: (_r: Rect, inert_text: string, theme: *Text_Input_Theme, identifie
             text := state.text;
             return result_action, text, state;
         }
-        
+
         return result_action, "", state;
     } else {
         draw_text_input_background(r, theme, state);
 
-        to_draw: string;
-        if theme.maintain_text_after_escape  to_draw = ifx state.text then state.text else inert_text;
-        else                                 to_draw = inert_text;
-        
+        to_draw := ifx state.text else inert_text;
         label(r, to_draw, *theme.label_theme);
     }
-    
+
     return result_action, "", state;
 }
 
 
-text_input_event :: (widget: *Active_Widget, event: Event) {
+text_input_serial_events :: (widget: *Active_Widget, events: [] Event) {
     state := cast(*Text_Input_State) active_widget;
-    handle_event(state, event);
+    array_add(*state.buffered_events, ..events);
 }
 
 handle_event :: (state: *Text_Input_State, event: Event) {
-    if !state return;
     if state.disabled return;
+
+    if text_input_check_for_activation(state, event) {
+        activate(state);
+    }
 
     if event.type == .TEXT_INPUT {
         utf8_text := character_utf32_to_utf8(event.utf32);
@@ -144,7 +124,7 @@ handle_event :: (state: *Text_Input_State, event: Event) {
 
         key := event.key_code;
         using Key_Code;
-        
+
         if event.key_pressed {
             if event.ctrl_pressed {
                 if key == {
@@ -165,26 +145,24 @@ handle_event :: (state: *Text_Input_State, event: Event) {
                     case INSERT;       insert_clipboard_at_cursor(state);
                 }
             }
-            
+
             if key == {
                 case ARROW_LEFT;   move_cursor_left         (state, event.shift_pressed);
                 case ARROW_RIGHT;  move_cursor_right        (state, event.shift_pressed);
                 case HOME;         move_cursor_to_beginning (state, event.shift_pressed);
                 case END;          move_cursor_to_end       (state, event.shift_pressed);
-                
+
                 case ARROW_DOWN;   navigate_history_forward (state);
                 case ARROW_UP;     navigate_history_backward(state);
-                
+
                 case BACKSPACE;    backspace_from_cursor(state);
                 case DELETE;       delete_from_cursor   (state);
-                
+
                 case ENTER;        press_enter(state, event.shift_pressed);
                 case TAB;          press_tab  (state, event.shift_pressed);
-                
-                case ESCAPE;       { // :Nicer
-                    state.pending_result_actions |= .ESCAPED; 
-                }
-                
+
+                case ESCAPE;       press_escape(state);
+
                 case MOUSE_BUTTON_LEFT;
                 status := get_status_flags(state.rect);
                 if status & .OVER {
@@ -203,35 +181,25 @@ handle_event :: (state: *Text_Input_State, event: Event) {
     }
 }
 
-text_input_check_for_activation :: (widget: *Active_Widget, events: []Event) {
+text_input_check_for_activation :: (widget: *Active_Widget, event: Event) -> bool {
+    // We could speed this up by having check_for_activation do an array of events,
+    // and return the index of the activating event, but this doesn't handle
+    // multiple reactivations per frame...
+
     state := cast(*Text_Input_State)widget;
-    if !state return;
-    status := get_status_flags(state.rect);
-    if !(status & .OVER) return;
-    for events text_input_check_for_activation(state, it);
-}
 
-text_input_check_for_activation :: (state: *Text_Input_State, event: Event) {
-    if !state return;
+    if event.type != .KEYBOARD              return false;
+    if !event.key_pressed                   return false;
+    if event.key_code != .MOUSE_BUTTON_LEFT return false;
 
-    //
-    // We get here when we are not active, but need to check for a click
-    // to see whether we should become active.
-    //
+    if state.disabled return false;
 
-    if event.type != .KEYBOARD              return;
-    if !event.key_pressed                   return;
-    if event.key_code != .MOUSE_BUTTON_LEFT return;
-
-    // The caller already checked that our status_flags were OVER, so we don't need that here.
-    // We just decide whether this particular event activates us or not.
-    if !state.active {
-        activate(state);  // This calls active_widget_add but also does .PRESSED status.
+    status := get_status_flags(state.rect, widget_if_querying_outside_of_render_time=state);
+    if !(status & .OVER) {
+        return false;
     }
-    
-    start_selecting(state);
 
-    state.current_click_time = current_time;
+    return true;
 }
 
 refresh_input_from_history :: (using state: *Text_Input_State) {
@@ -251,35 +219,18 @@ set_input :: (using state: *Text_Input_State, _s: string) {
 
     s := _s;
     if s.count >= input_buffer.count  s.count = input_buffer.count;
-    
+
     memcpy(input_buffer.data, s.data, s.count);
     text.count   = s.count;
     insert_point = s.count;
     pending_result_actions |= .TEXT_MODIFIED;
-    
+
     update_auto_complete(state);
 
     deselect(*state.selection);
 }
 
 activate :: (using state: *Text_Input_State) {
-    // :VariablesNeededForEventHandling
-    //
-    // We used to only call activate() when we were drawing. But this leads to bad behavior at
-    // low frame rates when there are events coming in quickly -- if you have a click and then a few
-    // keystrokes, and the click does not activate your widget until the next draw, then the keystrokes
-    // could be handled by the previous widget, and thus appear to be processed out of order.
-    //
-    // I used to think stuff like this was fine, but after having some agonizing times with low-frame-rate
-    // experiences, I want to make the code cleaner and more robust about these kinds of things.
-    // Unfortunately, it adds a bit of complexity, because there are variables that we know
-    // at draw time (because of the nature of the API) that we don't know at event handling time
-    // (which is centralized), so we need to store copies of them on 'state'. This causes maybe
-    // some extra questions about lifetime that we would not otherwise have (see :DisplayTextLifetime).
-    // Here, 'maintain_text_after_escape' and 'last_inert_text' are such variables.
-    //
-    if !state return;
-
     active = true;
 
     active_widget_add(state);
@@ -288,20 +239,7 @@ activate :: (using state: *Text_Input_State) {
     base.action_duration   = 0;
     base.action_duration_2 = 0;
 
-    if state.maintain_text_after_escape {
-        // If text was edited, but then the user pressed escape, don't replace with inert_text.
-        // Otherwise, do. Well, if they also just delete everything then hit escape, we will be
-        // back to inert_text. 
-        if !state.text  set_text(state, state.last_inert_text);
-    } else {
-        set_text(state, state.last_inert_text);
-    }
-}
-
-deactivate :: (using state: *Text_Input_State) {
-    if !state return;
-
-    active                  = false;
+    if !state.text  set_text(state, state.last_inert_text);
 }
 
 start_selecting :: (using state: *Text_Input_State) {
@@ -322,7 +260,7 @@ start_selecting :: (using state: *Text_Input_State) {
     // Maybe we should go IMGUI with the whole thing, in which case the user would
     // pass us a state struct holding the memory, insert point etc each frame?
     // We'll see how this goes, structurally...
-    
+
     did_initial_mouse_click_so_check_for_deadzone_change = true;
 }
 
@@ -331,9 +269,9 @@ get_result :: (using state: *Text_Input_State) -> string {
     return text;
 }
 
-reset :: (using state: *Text_Input_State) {  // @Cleanup: Nobody calls this right now.
+reset :: (using state: *Text_Input_State) {
     if !state return;
-    
+
     deselect(*selection);
 
     pending_result_actions = 0;
@@ -345,15 +283,15 @@ reset :: (using state: *Text_Input_State) {  // @Cleanup: Nobody calls this righ
 draw_text_input_background :: (r: Rect, theme: *Text_Input_Theme, state: *Text_Input_State, active := false, changed := false) {
     // So that we can factor this out and use it from other things that don't want to instantiate
     // a text input yet, e.g. Number_Entry.
-    
+
     // @Temporary @Hack? Update_production_value_button only uses button_theme
     // for press_duration... for now.
 
     // We could consider just using the Button_Theme... or making a duck copy macro!
 
     button := *theme.button_theme;
-    
-    // 
+
+    //
     // We piggy-back on update_production_value_button for some factors, but,
     // we interpolate 'active' on our own.
     //
@@ -362,7 +300,7 @@ draw_text_input_background :: (r: Rect, theme: *Text_Input_Theme, state: *Text_I
     } else {
         state.active_t = move_toward(state.active_t, 0, button.down_fade_out_speed);
     }
-    
+
     status := get_status_flags(r);
     update_production_value_button(r, changed, *state.base, status, button);
 
@@ -378,7 +316,7 @@ draw_text_input_background :: (r: Rect, theme: *Text_Input_Theme, state: *Text_I
 draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = null, identifier: s64 = 0, loc := #caller_location) {
     if !state return;
     if !theme  theme = *default_overall_theme.text_input_theme;
-    
+
     clamp_insert_point(state);
 
     x0 := cast(s32) r.x;
@@ -389,9 +327,9 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
 
     font := theme.font;
     if !font  font = get_default_font_at_size(r.h*.65);
-    
+
     xpad := em(theme.alignment_pad_ems, font);
-    
+
     push_scissor(r);
     defer pop_scissor();
 
@@ -402,7 +340,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
     effect :: 0;
 
     active_factor := state.active_t;
-    
+
     text_color       := lerp(theme.text_color, theme.text_color_over,    state.base.over_factor);
     text_color        = lerp(text_color,       theme.text_color_pressed, active_factor);
 
@@ -413,7 +351,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
         auto_complete_text := match_array[match_selection];
         text_width = draw_procs.prepare_text(font, auto_complete_text, effect);
     }
-    
+
     vert := theme.text_baseline_vertical_position;
     if vert == FLOAT32_INFINITY {
         vert = default_text_baseline(font, r.h);
@@ -422,6 +360,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
     }
 
     text_x := x0 + xpad;
+
     text_y := y0 + vert;
 
     if theme.alignment == {
@@ -432,7 +371,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
       case .Left;
         text_x = x0 + xpad;
     }
-    
+
     if !state.active state.camera_initted = false;
     if !state.camera_initted {
         state.camera_initted = true;
@@ -442,7 +381,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
     width_up_to_insert: s64;
     if state.active {
         if state.current_click_time >= 0 {
-            // Consider double/triple clicks.                
+            // Consider double/triple clicks.
             if theme.multiclick_delay_max >= 0 {
                 if state.current_click_time - state.last_click_time <= theme.multiclick_delay_max {
                     state.num_consecutive_clicks += 1;
@@ -474,6 +413,11 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
         // Dragging code is next. Don't do dragging if we are multiclicking, which is why
         // we check num_consecutive_clicks < 2.
         if state.num_consecutive_clicks < 2 {
+
+            // Extra check to make sure we aren't dragging after the user releases the mouse button
+            if state.cursor_tracking_mouse && !mouse_button_left_state
+                state.cursor_tracking_mouse = false;
+
             if state.cursor_tracking_mouse {
                 // Update the insert point based on mouse drag;
                 // do this before any other logic involving the insert point,
@@ -500,14 +444,14 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
                 selection_was_modified(*state.selection);  // Just sanity-check when mouse motion ends.
             }
         }
-        
+
         // Find the x coordinate of the insert point.
         //
         // This is kind of expensive!!! And a waste if cursor_tracking_mouse because we just
         // computed this coordinate in get_insert_point_for_cursor, and we are doing it again here.
         // However, maybe we aren't tracking the mouse, maybe the font is changing every frame or
         // the Text_Input is moving. So we just compute the value. It's slow and icky. @Speed.
-        
+
         s_up_to_insert := state.text;
         s_up_to_insert.count = state.insert_point;
         width_up_to_insert = draw_procs.prepare_text(font, s_up_to_insert, effect);
@@ -549,7 +493,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
                 state.shrunken_deadzone_margin = 0;  // Dummy value >= 0 to kick us into shrink mode. Updated below.
             }
         }
-        
+
         if state.shrunken_deadzone_margin >= 0 {
             // If the shrunken margin got bigger, so that it approaches the preferred margin again,
             // let it get bigger. If it meets or exceeds the size of the preferred margin,
@@ -571,7 +515,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
                 deadzone_x1 = x1 - state.shrunken_deadzone_margin;
             }
         }
-        
+
         dx := 0.0;
         if insert_x < deadzone_x0 {
             dx = deadzone_x0 - insert_x;
@@ -580,7 +524,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
         }
 
         state.camera_x -= dx;
-        
+
         left_limit  := -alignment_pad;
         right_limit := text_width + alignment_pad - (x1 - x0);
         if theme.alignment == .Left {
@@ -594,12 +538,12 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
                 right_limit = mid;
             }
         }
-        
+
         Clamp(*state.camera_x, left_limit, right_limit);
         text_x = x0 - state.camera_x;
         state.last_displayed_text_x = text_x;
     }
-    
+
     //
     // @Speed: We don't necessarily reuse prepared text here currently, because it's
     // just confusing what is going on with all the autocomplete stuff. But it's possible
@@ -608,7 +552,6 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
     if state.active {
         // Draw the selection if it is active.
         if nonempty(state.selection) {
-            using state; // :Nicer
             sx0, sx1 := get_selection_endpoints(font, text, effect, text_x, selection.start_character, selection.end_character);
 
             sy0 := cast(float) y0;
@@ -618,7 +561,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
             p1 := Vector2.{sx1, sy0};
             p2 := Vector2.{sx1, sy1};
             p3 := Vector2.{sx0, sy1};
-            
+
             draw_procs.set_shader_for_color(true);
             draw_procs.immediate_quad(p0, p1, p2, p3, theme.selection_color);
             draw_procs.immediate_flush();
@@ -640,13 +583,13 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
                 if theta < TAU * .25 {
                     stride *= 6;
                 }
-                
+
                 w := cast(float)(cos(theta) * stride + center);
                 Clamp(*w, 0, 1);
-                
+
                 auto_complete_color.w = w;
             }
-            
+
             my_draw_text(font, xx text_x, xx text_y, auto_complete_text, auto_complete_color, effect);
         }
     }
@@ -666,7 +609,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
     if !state.active return;
 
     cursor_color := get_cursor_color(state, theme, text_color);
-        
+
     // Draw the cursor.
     // s_up_to_insert @Cutnpaste from above.
     {
@@ -682,7 +625,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
             cw = max(1.0, em(theme.cursor_width_inside_text, font));
             cursor_x -= cw * .5;
         }
-        
+
         draw_procs.set_shader_for_color(true);
         {
             x0 := cursor_x;
@@ -690,7 +633,7 @@ draw :: (using state: *Text_Input_State, r: Rect, theme: *Text_Input_Theme = nul
             y0, y1 := get_y_range(font, text_y);
 
             y0 = y1 - font.character_height;
-            
+
             p0 := Vector2.{x0, y0};
             p1 := Vector2.{x1, y0};
             p2 := Vector2.{x1, y1};
@@ -721,7 +664,7 @@ update_multiclick_selection :: (using state: *Text_Input_State, point: int) {
                 if !should_expand(text[selection.start_character-1]) break;
                 selection.start_character -= 1;
             }
-            
+
             if should_expand(text[selection.end_character-1]) while selection.end_character < text.count {
                 if !should_expand(text[selection.end_character]) break;
                 selection.end_character += 1;
@@ -742,10 +685,10 @@ update_multiclick_selection :: (using state: *Text_Input_State, point: int) {
         // Some editors will select nearby text if it's a small range of spaces
         // (because maybe you just missed the text), or select the spaces if it's a big
         // range. We could think about that.
-        
+
         // @Polish
         // In a right-to-left language, you'd put it on the left?
-        
+
         selection.active = true;
 
         selection_was_modified(*selection);  // May set active back to false if the selection is empty.
@@ -763,10 +706,10 @@ get_cursor_color :: (state: *Text_Input_State, theme: *Text_Input_Theme, non_whi
 
     t := cos((current_time - state.last_keypress_time) * 3);
     t *= t;
-    
+
     color := lerp(non_white, white, cast(float32)t);
     return color;
-    
+
     // return make_vector4(1, 1, 1, 1);
 }
 
@@ -795,7 +738,7 @@ get_selection :: (using state: *Text_Input_State) -> string /* Temporary Storage
     _result.data = text.data + start;
     _result.count = end - start;
     result := copy_temporary_string(_result);
-    
+
     return result;
 }
 
@@ -806,14 +749,14 @@ replace_selection :: (state: *Text_Input_State, s: string) {
 
     pre  := state.text;
     pre.count = start;
-    
+
     post := state.text;
     advance(*post, end);
 
     // There is an extra copy here; we allocate via Temporary_Storage
     // then set_input copies it into the input_buffer. We could
     // just copy these straight into the input buffer.
-    new_text := join(pre, s, post, allocator=temp);
+    new_text := join(pre, s, post,, allocator=temp);
     set_input(state, new_text);
 
     if !s.count {
@@ -823,7 +766,7 @@ replace_selection :: (state: *Text_Input_State, s: string) {
         state.selection.start_character = start;
         state.selection.end_character   = start + s.count;
     }
-}    
+}
 
 
 nonempty :: (selection: Selection) -> bool {
@@ -835,7 +778,7 @@ nonempty :: (selection: Selection) -> bool {
 
 sanitize :: (s: string) -> string {
     pieces := break_into_lines(s, " ");
-    
+
     return join(..pieces);
 }
 
@@ -863,7 +806,7 @@ seek_left_one_utf8_character :: (s: string, _point: int) -> int {
 
 // We could factor these two functions together with an indicator of which direction to go.
 // Right now it's not quite worth it (??) but may become so if they get even a little bigger.
-seek_left_one_word :: (s: string, point: int) -> int { 
+seek_left_one_word :: (s: string, point: int) -> int {
     point -= 1;
     if point < 0  return 0;
 
@@ -897,19 +840,19 @@ seek_right_one_word :: (s: string, point: int) -> int {
 
 get_y_range :: (font: *Font, text_y: float) -> (y0: float, y1: float) {
     assert(font != null);
-    
+
     FONT_CURSOR_EXTRA_HEIGHT :: 0.1;  // @Hardcode @Cleanup
     y0 := text_y + font.typical_descender;
     y1 := y0 + font.typical_ascender + FONT_CURSOR_EXTRA_HEIGHT * font.character_height;
 
     y1 += 1;  // To include the top pixel, rather than limit just before the top pixel.
-    
+
     padding := (y1 - y0) / 8;
 
     // We tend to need more extra padding on the top than bottom, since most letters don't have descenders.
     y0 -= padding;
     y1 += padding * 2;
-    
+
     return y0, y1;
 }
 
@@ -961,12 +904,15 @@ make_forward_selection :: (old: Selection) -> Selection {
 // Autocomplete stuff:
 
 //
-// To add auto-complete to a Text_Input, implement a function of type Auto_Complete and call
-// set_auto_complete(). The 'longest_match_length' return value is used by the Text_Input to
+// To add auto-complete to a Text_Input, implement a function of type Auto_Complete.proc and
+// pass it to text_input(). The 'longest_match_length' return value is used by the Text_Input to
 // color the text to show how much of what you typed is correct; thus it must represent
 // the longest substring match even if that match is not complete (and thus 'results' is empty).
 //
-Auto_Complete :: #type (str: string, data: *void) -> (results: [] string, longest_match_length: int);
+Auto_Complete :: struct {
+    proc: (str: string, data: *void) -> (results: [] string, longest_match_length: int);
+    data: *void;
+}
 
 #scope_file
 
@@ -975,8 +921,8 @@ reset_auto_complete :: (using state: *Text_Input_State) {
 
     array_reset(*match_array);    // Avoid leaking. @@ Ideally this should happen automatically in the assignment. Assignment could even avoid reallocating memory.
 
-    if auto_complete {
-        if text match_array, longest_match = auto_complete(text, auto_complete_data);
+    if auto_complete.proc {
+        if text match_array, longest_match = auto_complete.proc(text, auto_complete.data);
 
         get_match_length :: (match_array: []string, n: int) -> int {
             if match_array.count == 0 return 0;
@@ -1021,14 +967,14 @@ update_auto_complete :: (using state: *Text_Input_State) {
     if !state return;
 
     tab_pressed = false;
-    
+
     if match_array {
         // Try to preserve previous selection.
         last_match := match_array[match_selection];
 
         reset_auto_complete(state);
-        
-        // Restore previous selection.    
+
+        // Restore previous selection.
         for match_array {
             if it == last_match match_selection = it_index;
         }
@@ -1039,7 +985,7 @@ update_auto_complete :: (using state: *Text_Input_State) {
 }
 
 // Tab autocompletes up to match_length.
-advance_auto_complete :: (using state: *Text_Input_State, reverse:bool) {
+advance_auto_complete :: (using state: *Text_Input_State, reverse: bool) {
     if !state return;
 
     if match_array {
@@ -1049,10 +995,10 @@ advance_auto_complete :: (using state: *Text_Input_State, reverse:bool) {
         } else {
             if reverse {
                 match_selection -= 1;
-                if (match_selection < 0) match_selection = match_array.count;
+                if match_selection < 0 then match_selection = match_array.count - 1;
             } else {
                 match_selection += 1;
-                if (match_selection == match_array.count) match_selection = 0;
+                if match_selection >= match_array.count then match_selection = 0;
             }
         }
     }
@@ -1072,7 +1018,7 @@ accept_auto_complete :: (using state: *Text_Input_State) -> bool {
 break_into_lines :: (s: string, between_lines_string := "") -> [] string {
     pieces: [..] string;
     pieces.allocator = __temporary_allocator;
-    
+
     cursor := 0;
     for i: 0..s.count-1 {
         if (s[i] == 10) || (s[i] == 13) {
@@ -1084,11 +1030,11 @@ break_into_lines :: (s: string, between_lines_string := "") -> [] string {
                 array_add(*pieces, to_add);
                 if between_lines_string array_add(*pieces, between_lines_string);
             }
-            
+
             cursor = i + 1;
         }
     }
-    
+
     to_add: string;
     to_add.data  = s.data + cursor;
     to_add.count = s.count - cursor;
@@ -1097,7 +1043,7 @@ break_into_lines :: (s: string, between_lines_string := "") -> [] string {
 
     return pieces;
 }
-    
+
 
 get_selection_endpoints :: (font: *Font, text: string, effect: Font_Effects, text_x: float, start_character: int, end_character: int) -> (x0: float, x1: float) {
     sx0, sx1: float;
@@ -1106,7 +1052,7 @@ get_selection_endpoints :: (font: *Font, text: string, effect: Font_Effects, tex
 
     s_up_to_end := text;
     s_up_to_end.count = end_character;
-    
+
     start_width := draw_procs.prepare_text(font, s_up_to_start, effect);
     end_width   := draw_procs.prepare_text(font, s_up_to_end,   effect);
 
@@ -1129,7 +1075,7 @@ get_insert_point_for_cursor :: (state: *Text_Input_State, font: *Font, text: str
     //
     // The important thing to note is, if the widget is moving, the user clicked
     // a place that was correct *last* frame, which is why we are using last_text_x
-    // rather than a fully updated text_x for this frame. 
+    // rather than a fully updated text_x for this frame.
 
     //
     // Anyway, we need to recompute the positions of all glyphs based on last_text_x,
@@ -1143,11 +1089,11 @@ get_insert_point_for_cursor :: (state: *Text_Input_State, font: *Font, text: str
     //
     x := state.last_displayed_text_x;
     if x == FLOAT32_INFINITY  x = current_frame_text_x;
-    
+
     if !glyphs_prepped {
         draw_procs.prepare_text(font, text, effect);
-    }        
-    
+    }
+
     best_byte_offset := -1;
     best_dist := FLOAT32_MAX;
 
@@ -1181,19 +1127,25 @@ get_insert_point_for_cursor :: (state: *Text_Input_State, font: *Font, text: str
 
 
 clear_text :: (using state: *Text_Input_State) {
+    text.data = input_buffer.data;
     text.count = 0;
     insert_point = 0;
 }
 
-set_text :: (state: *Text_Input_State, s: string) {
+set_text :: (state: *Text_Input_State, s: string, replace_pre_modification_text := true) {
     clear_text(state);
     append_text(state, s);
+
+    if replace_pre_modification_text {
+        free(state.pre_modification_text);
+        state.pre_modification_text = copy_string(s);
+    }
 }
 
 append_text :: (using state: *Text_Input_State, s: string) {
     bytes_available := input_buffer.count - text.count;
     to_copy := min(bytes_available, s.count);
-    
+
     memcpy(input_buffer.data + text.count, s.data, to_copy);
     text.count += to_copy;
     insert_point += to_copy;  // @Hack: Assume insert_point is at the end. If we want this to be more robust, we could just insert at the point here as we do when pasting.
@@ -1217,10 +1169,10 @@ insert_text :: (using state: *Text_Input_State, s: string) -> bool {
     if text.count + s.count > input_buffer.count return false;  // Not enough room!
 
     clamp_insert_point(state);
-    
+
     if insert_point < text.count {
         // Copy right-to-left so that we don't wipe out our own text
-        // for small inserts. 
+        // for small inserts.
         i := text.count;
         while i > insert_point {
             input_buffer[i] = input_buffer[i-s.count];
@@ -1235,7 +1187,7 @@ insert_text :: (using state: *Text_Input_State, s: string) -> bool {
     update_auto_complete(state);
 
     state.pending_result_actions |= .TEXT_MODIFIED;
-    
+
     return true;
 }
 
@@ -1247,7 +1199,7 @@ select_all :: (using state: *Text_Input_State) {
     selection.end_character   = text.count;
 
     selection_was_modified(*selection);
-}    
+}
 
 copy_selection_to_clipboard :: (using state: *Text_Input_State, cut := false) {
     if nonempty(selection) {
@@ -1279,7 +1231,7 @@ insert_clipboard_at_cursor :: (using state: *Text_Input_State) {
         start, end := get_selection_indices(state);
         selection_count = end - start;
     }
-    
+
     if text.count + paste_text.count - selection_count <= input_buffer.count {
         if selection_count > 0 {
             replace_selection(state, "");
@@ -1294,7 +1246,7 @@ insert_clipboard_at_cursor :: (using state: *Text_Input_State) {
 
         combined := join(pre, paste_text, post);
         defer free(combined);
-        
+
         set_input(state, combined);
 
         insert_point = pre.count + paste_text.count;
@@ -1309,7 +1261,7 @@ move_cursor_left :: (using state: *Text_Input_State, want_selection := false) {
     prev_point := seek_left_one_utf8_character(state.text, state.insert_point);
     state.insert_point = prev_point;
     clamp_insert_point(state);
-    
+
     update_selection_after_cursor_movement(state);
 }
 
@@ -1323,7 +1275,7 @@ move_cursor_right :: (state: *Text_Input_State, want_selection := false) {
         state.insert_point += nbytes;
         clamp_insert_point(state);
     }
-    
+
     update_selection_after_cursor_movement(state);
 }
 
@@ -1370,7 +1322,7 @@ navigate_history_backward :: (using state: *Text_Input_State) {
         if last_saved_input  free(last_saved_input);
         last_saved_input = copy_string(text);
     }
-    
+
     command_history_index -= 1;
     refresh_input_from_history(state);
 }
@@ -1394,6 +1346,7 @@ backspace_from_cursor :: (using state: *Text_Input_State) {
 
     if nonempty(selection) {
         replace_selection(state, "");
+        pending_result_actions |= .TEXT_MODIFIED;
     } else if (insert_point <= text.count) && (insert_point >= 1) {
         prev_point := seek_left_one_utf8_character(text, insert_point);
         nbytes := insert_point - prev_point;
@@ -1404,6 +1357,7 @@ backspace_from_cursor :: (using state: *Text_Input_State) {
         insert_point -= nbytes;
         text.count   -= nbytes;
         update_auto_complete(state);
+        pending_result_actions |= .TEXT_MODIFIED;
     }
 }
 
@@ -1412,6 +1366,7 @@ delete_from_cursor :: (using state: *Text_Input_State) {
 
     if nonempty(selection) {
         replace_selection(state, "");
+        pending_result_actions |= .TEXT_MODIFIED;
     } else if insert_point < text.count {
         nbytes := 1 + trailingBytesForUTF8[text[insert_point]];
         for i: insert_point..text.count-nbytes-1 {
@@ -1420,6 +1375,7 @@ delete_from_cursor :: (using state: *Text_Input_State) {
 
         text.count -= nbytes;
         update_auto_complete(state);
+        pending_result_actions |= .TEXT_MODIFIED;
     }
 }
 
@@ -1430,14 +1386,17 @@ press_enter :: (using state: *Text_Input_State, shift_pressed := false) {
     if tab_pressed {
         handled = accept_auto_complete(state);
     }
-    
+
     pending_result_actions |= .ENTERED;
-    
+
     // shift_plus_enter_was_pressed = shift_pressed;
 
     copy := copy_string(text);
     if text  array_add(*command_history, copy);  // Don't add blank lines.
     command_history_index += 1;
+
+    free(pre_modification_text);
+    pre_modification_text = copy_string(copy);
 }
 
 press_tab :: (using state: *Text_Input_State, shift_pressed := false) {
@@ -1451,12 +1410,17 @@ press_tab :: (using state: *Text_Input_State, shift_pressed := false) {
     }
 }
 
+press_escape :: (using state: *Text_Input_State) {
+    set_text(state, state.pre_modification_text, replace_pre_modification_text=false);
+    active_widget_remove(state);
+    state.pending_result_actions |= .ESCAPED;
+}
 
 text_input_deactivate :: (widget: *Active_Widget) { // This is a non-user-level routine, so it is different from 'deactivate', even though they both do the same almost-nothing right now.
     state := cast(*Text_Input_State) widget;
 
-    if disable_deactivate_text_input_hook return;
-    
+    // if disable_deactivate_text_input_hook return;
+
     state.active                 = false;
     state.cursor_tracking_mouse  = false;
     state.pending_result_actions = 0;
@@ -1464,7 +1428,7 @@ text_input_deactivate :: (widget: *Active_Widget) { // This is a non-user-level 
 
 #scope_file
 
-disable_deactivate_text_input_hook := false;
+// disable_deactivate_text_input_hook := false;
 
 reset_or_begin_selection :: (using state: *Text_Input_State, do_begin: bool) {
     if !state return;
@@ -1508,11 +1472,11 @@ Text_Input_Theme :: struct {
     button_theme.frame_color_over     = Vector4.{.15, .45, .75, 1.0};
     button_theme.frame_color_down     = Vector4.{.45, .75, .95, 1.0};
     button_theme.frame_color_flash    = Vector4.{.85, .85, .99, 1.0};
-    
 
-    
+
+
     text_color               = Vector4.{.30, .65, .65, 1.0};  // Inherited from button_theme.label_theme.
-    
+
     text_color_over          = Vector4.{.99, .70, .70, 1.0};
     text_color_pressed       = Vector4.{.55, .99, .99, 1.0};
 
@@ -1522,7 +1486,7 @@ Text_Input_Theme :: struct {
     selection_color         := Vector4.{.15, .69, .85, 1.0};
 
     cursor_color            := Vector4.{1.0, 1.0, 1.0, 1.0};
-    
+
     text_insert_margin         := 4.7;  // How much you want to be able to see when typing near the edge of a text in put, in ems. The resulting pixel value is clamped at 49% of the width of the rect at render time (otherwise it would be ill-defined where you want the insert point to be, unless we had two different margins).
 
     cursor_width_inside_text   := 0.11;  // In ems.
@@ -1537,27 +1501,27 @@ Text_Input_Theme :: struct {
 
 Text_Input_State :: struct #type_info_none {
     #as using widget: Active_Widget;
+
     widget.deactivate_proc           = text_input_deactivate;
-    widget.event_proc                = text_input_event;
+    widget.serial_events_proc        = text_input_serial_events;
     widget.check_for_activation_proc = text_input_check_for_activation;
-    
+
     base: Button_State;  // Not all of these members are used.
 
     rect: Rect;  // We use this on the next frame when dispatching input, in a way that may be 1-frame-delayed. @Cleanup.
-    
+
     camera_initted  := false;
     camera_x        := 0.0;
     active_t        := 0.0;
 
     active         := false;  // If false, we draw as a label. If true, we actually run the text input code.
     disabled       := false;  // The user may set this at any time to disable the input.
-    
+
     shrunken_deadzone_margin := -1.0;     // -1 means disabled.
     last_displayed_text_x    := FLOAT32_INFINITY;  // Infinity means not yet initted (-1 might be a valid draw position!)
     last_keypress_time: float64;
 
-    maintain_text_after_escape := false;  // Copied from Theme. See :VariablesNeededForEventHandling.
-    last_inert_text := "";                // See :VariablesNeededForEventHandling.
+    last_inert_text := "";
 
     // For tracking double/triple clicks:
     last_click_time       : float64;
@@ -1566,22 +1530,24 @@ Text_Input_State :: struct #type_info_none {
 
     last_click_position: Vector2;
     click_position:      Vector2;
-    
+
     // Text and dragging stuff:
     insert_point := 0;
     cursor_tracking_mouse := false;
 
     did_initial_mouse_click_so_check_for_deadzone_change := false;
-    
+
     pending_result_actions: Text_Result_Action;
-    
+
     last_saved_input: string;
+    pre_modification_text: string;  // What to revert back to when you press Escape. Should this be combined with last_saved_input?
 
     command_history: [..] string;
     command_history_index := 0;
-    
+
 
     selection: Selection;
+    buffered_events: [..] Event;
 
     text: string;
 
@@ -1589,9 +1555,8 @@ Text_Input_State :: struct #type_info_none {
     input_buffer: [MAX_BUFFER_SIZE] u8;
 
     // Auto-completion stuff below:
-    
+
     auto_complete : Auto_Complete;
-    auto_complete_data : *void = null;  // @@ Wouldn't it be nice to have closures?
 
     tab_pressed := false;
     completion_change_time: float64;
@@ -1604,4 +1569,3 @@ Text_Input_State :: struct #type_info_none {
     // Revisit these:
     do_active_widget_deactivate_all := false;  // @Hack while we figure out how to structure this stuff.
 }
-

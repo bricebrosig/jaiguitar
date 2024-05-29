@@ -1,6 +1,8 @@
-dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *Dropdown_Theme = null, identifier: s64 = 0, z: s32 = 100, loc := #caller_location) -> Dropdown_State {
+dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *Dropdown_Theme = null, identifier: s64 = 0, z: s32 = 100, loc := #caller_location) -> changed: bool, Dropdown_State {
     if !theme  theme = *default_overall_theme.dropdown_theme;
-    
+
+    original_value := current_value_pointer.*;
+
     // r just describes the Rect for the top of the dropdown.
     // The individual elements below are sized according to theme.button_theme.
 
@@ -21,7 +23,7 @@ dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *D
         stop_using_state(state);
         state.last_getrect_frame -= 1;  // @Hack because we don't have a separate state rect for the popup. @Incomplete!
     }
-    
+
 
     // Carve off the dropdown indicator from the rest of the button.
     indicator_width := theme.dropdown_indicator_aspect_ratio * r.h;
@@ -33,22 +35,24 @@ dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *D
 
     pressed, current_value_state := button(r_left, current_string, *current, identifier, loc);
     current.rectangle_shape.rounding_flags = Rectangle_Shape.Rounding_Flags.NORTHEAST | .SOUTHEAST;
+    state.status = current_value_state.status;
 
     other_pressed: bool;
     {
         disable_the_duplicate_widget_error = true;   // So that we can do the duplicate button thing below and not generate complaints.
         defer disable_the_duplicate_widget_error = false;  // So that we can do the duplicate button thing below and not generate complaints.
-        other_pressed = button(r_right, "", *current, identifier, loc);  // Same identifier and loc so they press simultaneously.
+        other_pressed=, other_state := button(r_right, "", *current, identifier, loc);  // Same identifier and loc so they press simultaneously.
+        state.status |= other_state.status;
     }
 
-    
+
     if pressed || other_pressed {
         state.open = !state.open;
         if state.open active_widget_add   (state);
         else          active_widget_remove(state);
     }
 
-    
+
     triangle_margin := r_right.w * 0.1;
 
     //
@@ -61,7 +65,7 @@ dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *D
     } else {
         state.open_t = move_toward(state.open_t, 0, dt * theme.arrow_flip_down_rate);
     }
-    
+
     //
     // Draw the dropdown arrow.
     //
@@ -101,10 +105,11 @@ dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *D
             p5 += barycenter;
             p6 += barycenter;
         }
-        
-        
+
+
         draw_arrow(current_value_state, p4, p5, p6, *theme.theme_for_current_value);
     }
+
 
     if state.open {
         state.base_rect             = r;
@@ -119,8 +124,8 @@ dropdown :: (r: Rect, choices: [] string, current_value_pointer: *s32, theme: *D
 
     add_popup(draw_dropdown_popup, state, state.z);
     // draw_dropdown_popup(state);
-    return state;
-}  // dropdown    
+    return current_value_pointer.* != original_value, state;
+}
 
 draw_dropdown_popup :: (_state: *void) {
     state := cast(*Dropdown_State) _state;
@@ -128,8 +133,11 @@ draw_dropdown_popup :: (_state: *void) {
 
     start_using_state(state);
     defer stop_using_state(state);
-    
+
     r := state.base_rect;
+
+    occluder_start(state, r);
+
     theme                 := state.theme;
     current_value_pointer := state.current_value_pointer;
     choices               := state.choices;
@@ -138,33 +146,34 @@ draw_dropdown_popup :: (_state: *void) {
     label_each_choice := choice_theme.label_theme;
 
     current_value := current_value_pointer.*;
-    
+
     // For now, assume the choices are the same height as the current value display.
     s := r;
-    s.y += r.h;  // @brice make the dropdown go up
+    // s.y -= r.h;  // @brice
+    s.y += r.h;
 
     top_y    := s.y;
     bottom_y := s.y;
-    
+
     pick_choice := -1;
-    if state.open {  // don't we not need to do this check?
+    if state.open {
         for choices {
             sub_hash := get_hash(#location(), it_index);
             choice_hash := combine_hashes(state.hash, sub_hash);
 
             t := choice_theme;
             if (cast(s32) it_index) == current_value  t = *theme.theme_for_current_choice;
-            
-            pressed, _, released := button(s, it, t, xx choice_hash, state.loc);
+
+            pressed, _, released := button(s, it, t, xx,no_check choice_hash, state.loc);
             bottom_y = s.y;
             // s.y -= s.h;
-            s.y += s.h;  // @brice make the dropdown go up
+            s.y += s.h;  // @brice make dropdown go up
 
             if released {
                 pick_choice = it_index;
             }
         }
-        
+
         if pick_choice >= 0 {
             state.open = false;
             current_value_pointer.* = cast(s32) pick_choice;
@@ -172,17 +181,18 @@ draw_dropdown_popup :: (_state: *void) {
         }
     }
 
-    s.h = bottom_y - top_y;  // flipped because it goes up now
+    // s.h = top_y - bottom_y;
+    s.h = bottom_y - top_y;  // @brice
     s.y = bottom_y;   // Undo the y motion from the final choice.
     occluded := bound(r, s);
-    occlusion_declare(occluded, state);
-} // draw_dropdown_popup
+    occluder_finish(state, occluded);
+}
 
 
 dropdown_deactivate :: (widget: *Active_Widget) {
     state := cast(*Dropdown_State) widget;
     if !state.open return;
-    
+
     state.open = false;
 }
 
@@ -221,7 +231,7 @@ Dropdown_Theme :: struct {
     theme_for_each\  _choice.frame\ _color_over  = .{.45, .25, .25, 1};
     theme_for_each\  _choice.frame\ _color_flash = .{.95, .85, .85, 1};
     theme_for_each\  _choice.frame\ _color_down  = .{.70, .50, .35, 1};
-    
+
     dropdown_indicator_aspect_ratio := 1.0;  // This is for the little arrow showing it's a dropdown box. 1.0 means it's square, with width equal to r.h.
 
     arrow_flip_up_rate   := 2.5;
@@ -231,9 +241,10 @@ Dropdown_Theme :: struct {
 Dropdown_State :: struct #type_info_none {
     #as using widget: Active_Widget;
     widget.deactivate_proc = dropdown_deactivate;
-    
+
     open := false;
     open_t := 0.0;
+    status : Status_Flags;
 
     hash:      u64;
     base_rect: Rect;
@@ -241,7 +252,7 @@ Dropdown_State :: struct #type_info_none {
     theme:     Dropdown_Theme = ---;
     loc:       Source_Code_Location;
     z:         s32;
-    
+
     current_value_pointer: *s32;
     current_value_state:   *Button_State;
 }

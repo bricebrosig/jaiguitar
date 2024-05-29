@@ -30,7 +30,7 @@
 // You do not need to start up the GUI in order to generate samples. That said, generate_color_samples
 // is contained inside GetRect right now, so you would still need to import GetRect. Longer-term, maybe
 // we should put it into a sub-library?
-// 
+//
 //
 
 
@@ -62,23 +62,23 @@ color_animation_editor :: (r: Rect, theme: *Color_Animation_Editor_Theme = null,
     }
 
     draw_procs.set_shader_for_color(true);
-    
+
     // Draw the background.
     background := *theme.background;
     rounded_rectangle(r, background.shape, background.color, background.frame_color);
 
-    
+
     draw_color_gradient_bar(middle, theme, state, ipad_y);
 
     state.theme = theme;  // This is so that the callbacks for popups can look through the user data pointer for 'state' to find the Color_Animation_Editor_Theme, Number_Input_Theme, etc.
-    
+
     draw_color_picker(theme, state);
-    
+
     if theme.draw_subwidgets_flags & .TIME_VIEW
         draw_time_view(theme, state);
-    
+
     update_keyframe_color_due_to_open_color_picker(state);
-    
+
     return state;
 }
 
@@ -86,24 +86,24 @@ open_color_picker :: (theme: *Color_Animation_Editor_Theme, state: *Color_Animat
     sub := *state.color_picker_subwindow_info;
     sub.open = true;
     sub.wants_a_raise = true;
-    
+
     state.color_picker_keyframe_index = keyframe_index;
 
     key := *state.color_keyframes[keyframe_index];
     state.color_picker_editing_color_applied = key.color_rgb.xyz;
-    
+
     if state.last_color_picker_state {
         set_original_and_current_color_rgb(state.last_color_picker_state, key.color_rgb.xyz);
     }
-    
-    
+
+
     if state.color_picker_subwindow_rect_initialized {
         // Just set the x and y to the new position.
         // Keep the w and h from the old rect, in case it was resized.
 
         w := sub.rect.w;
         h := sub.rect.h;
-        
+
         x := key.pos_x - w * .5;
         y := bar_rect.y - h * 1.05;
 
@@ -116,7 +116,7 @@ open_color_picker :: (theme: *Color_Animation_Editor_Theme, state: *Color_Animat
         h := (3.7/3) * w;
         x := key.pos_x - w * .5;
         y := bar_rect.y - h * 1.05;
-        
+
         r := get_rect(x, y, w, h);
         sub.rect               = r;
         sub.fixed_aspect_ratio = r.w/r.h;
@@ -130,7 +130,7 @@ open_time_view :: (theme: *Color_Animation_Editor_Theme, state: *Color_Animation
     sub := *state.time_view_subwindow_info;
     sub.open = true;
     sub.wants_a_raise = true;
-    
+
     if !state.time_view_subwindow_rect_initialized {
         state.time_view_subwindow_rect_initialized = true;
 
@@ -138,7 +138,7 @@ open_time_view :: (theme: *Color_Animation_Editor_Theme, state: *Color_Animation
         h := (3.7/3) * w;
         x := bar_rect.x + bar_rect.w*.5;
         y := bar_rect.y - h * 1.05;
-        
+
         r := get_rect(x, y, w, h);
         sub.rect               = r;
         sub.fixed_aspect_ratio = r.w/r.h;
@@ -207,22 +207,22 @@ draw_callback_time_view :: (r: Rect, data: *void) {
     if state.time_view_playing {
         state.time_view_current_time += current_dt;
     }
-    
+
     period := state.time_view_period;
     t := cast(float) fmod_cycling(state.time_view_current_time / state.time_view_period, 1);
     Clamp(*t, 0, 1);
 
-    
+
     interp := get_interpolation(state);
     sorted := get_sorted_keyframes(state);
 
     temp_colors := make_temp_colors(sorted, interp.color_space);
-    
+
     i0 := find_index_of_t(sorted, t);  // May return -1.
-    color := interpolate_one_sample(i0, t, interp, sorted, temp_colors); 
+    color := interpolate_one_sample(i0, t, interp, sorted, temp_colors);
     color.w = 1;
 
-    
+
     margin := r.w * 0.025;
     inner_w := r.w - 2 * margin;
 
@@ -254,13 +254,13 @@ draw_callback_time_view :: (r: Rect, data: *void) {
     if play_pause_pressed {
         state.time_view_playing = !state.time_view_playing;
     }
-    
+
     // Period control in seconds:
     label_rect, samples_input_rect := cut_left(top_right, .7*top_right.w);
     label(label_rect, "Seconds:", *state.theme.label_theme);
     inert_string := tprint("%", state.time_view_period);
     number_changed := number_input(samples_input_rect, inert_string, *state.time_view_period, .01, 100.0, *state.theme.number_input_theme);
-    
+
     draw_procs.immediate_flush();
 }
 
@@ -276,14 +276,14 @@ draw_color_gradient_bar :: (area: Rect, theme: *Color_Animation_Editor_Theme, st
 
     if (theme.draw_subwidgets_flags & .INTERPOLATION_CONTROLS || theme.draw_subwidgets_flags & .SAMPLING_CONTROLS)
         cut_height -= row_spacing;
-        
-    if (theme.draw_subwidgets_flags & .TIME_VIEW && theme.draw_subwidgets_flags & .INTERPOLATION_CONTROLS 
+
+    if (theme.draw_subwidgets_flags & .TIME_VIEW && theme.draw_subwidgets_flags & .INTERPOLATION_CONTROLS
         || theme.draw_subwidgets_flags & .SAMPLING_CONTROLS && theme.draw_subwidgets_flags & .COPY_TO_CLIPBOARD)
         cut_height -= row_spacing;
 
     bar_rect, controls_area := cut_top(area, cut_height);
     bar_height := bar_rect.h;
-    
+
     alpha := 1.0;
     changed := my_color_slider(bar_rect, alpha, theme, state);
 
@@ -301,13 +301,13 @@ draw_color_gradient_bar :: (area: Rect, theme: *Color_Animation_Editor_Theme, st
     _pad: Rect = ---;
 
     dropdown_theme := *theme.dropdown_theme;
-    
+
     //
     // controls_left: Interpolation parameters.
     //
     {
         controls := controls_left;
-        
+
         r, _remainder   := cut_top(controls, button_height);
         if theme.draw_subwidgets_flags & .INTERPOLATION_CONTROLS {
             _pad, controls   = cut_top(_remainder, vpad);
@@ -321,7 +321,7 @@ draw_color_gradient_bar :: (area: Rect, theme: *Color_Animation_Editor_Theme, st
             _pad, controls   = cut_top(_remainder, vpad);
 
             r_wrapping, r_gamma := cut_left(r, .5*r.w, shrinkage);
-            
+
             checkbox_theme := *theme.checkbox_theme;
             wrapping_changed := base_checkbox(r_wrapping, "Wrapping", state.interpolation_wrapping, checkbox_theme);
             if wrapping_changed  state.interpolation_wrapping = !state.interpolation_wrapping;
@@ -355,12 +355,12 @@ draw_color_gradient_bar :: (area: Rect, theme: *Color_Animation_Editor_Theme, st
             _pad, controls   = cut_top(_remainder, vpad);
 
             _unused, r_output_type := cut_left(r, r.w*.5);
-            
+
             dropdown(r_output_type, OUTPUT_TYPE_NAMES, *state.output_type_s32, dropdown_theme);
 
             _samples_input_rect, _remainder0 := cut_top(controls, button_height);
             _pad, controls = cut_top(_remainder0, vpad);
-            
+
             label_rect, samples_input_rect := cut_left(_samples_input_rect, _samples_input_rect.w * .6);
 
             output_type = cast(Output_Type) state.output_type_s32;
@@ -372,10 +372,10 @@ draw_color_gradient_bar :: (area: Rect, theme: *Color_Animation_Editor_Theme, st
             }
         }
 
-        if theme.draw_subwidgets_flags & .COPY_TO_CLIPBOARD { 
+        if theme.draw_subwidgets_flags & .COPY_TO_CLIPBOARD {
             output_button_rect, _remainder1 := cut_top(controls, button_height);
             _pad, controls = cut_top(_remainder1, vpad);
-            
+
             output_button_theme := *theme.button_theme;
             font := output_button_theme.font;
 
@@ -394,7 +394,7 @@ get_sorted_keyframes :: (state: *Color_Animation_Editor_State, index_to_ignore :
 
     array_reserve(*sorted, state.color_keyframes.count);
     for * state.color_keyframes  if it_index != index_to_ignore  array_add(*sorted, it);
-    
+
     quick_sort(sorted, x => x.t);
 
     return sorted;
@@ -403,7 +403,7 @@ get_sorted_keyframes :: (state: *Color_Animation_Editor_State, index_to_ignore :
 // @Copypasta from color_picker.jai.
 my_color_slider :: (rect: Rect, alpha: float, theme: *Color_Animation_Editor_Theme, state: *Color_Animation_Editor_State) -> (changed: bool) {
     update_keyframes(rect, theme, state);
-    
+
     // input_color is hsv, rgb, or whatever we want to use for that particular slider.
     draw_procs.set_shader_for_color(true);
 
@@ -420,14 +420,14 @@ my_color_slider :: (rect: Rect, alpha: float, theme: *Color_Animation_Editor_The
     //
 
     num_samples := ifx cast(s32) floor(rect.w + .5) else 2;  // One per pixel, bro!
-    
+
     samples := *state.color_samples;
     array_resize(samples, num_samples);
-    
+
     interpolation := get_interpolation(state);
     sorted := get_sorted_keyframes(state);
     generate_color_samples(sorted, interpolation, samples.*);
-    
+
     //
     // Pass 2: Draw the colors.
     //
@@ -443,7 +443,7 @@ my_color_slider :: (rect: Rect, alpha: float, theme: *Color_Animation_Editor_The
 
         color := samples.*[i];
         color.w   = alpha;
-        
+
         if i != 0 {
             draw_procs.immediate_triangle(last_p0, last_p1, p1, last_color, last_color, color);
             draw_procs.immediate_triangle(last_p0, p1,      p0, last_color, color,       color);
@@ -462,7 +462,7 @@ my_color_slider :: (rect: Rect, alpha: float, theme: *Color_Animation_Editor_The
     }
 
     draw_procs.immediate_flush();
-    
+
     focus := has_focus(rect);
     down  := focus && (mouse_button_left_state & .DOWN);
 
@@ -479,10 +479,10 @@ my_color_slider :: (rect: Rect, alpha: float, theme: *Color_Animation_Editor_The
 
 update_keyframes :: (rect: Rect, theme: *Color_Animation_Editor_Theme, state: *Color_Animation_Editor_State) {
     // @Cleanup: Move this to *before* render!
-    
+
     status := get_status_flags(rect);
     activity_mask := cast(bool)(status & .OVER);
-    
+
     // Find the closest keyframe to the mouse pointer.
     // Only do this if we are not dragging!
     if !state.dragging_in_strip {
@@ -494,7 +494,7 @@ update_keyframes :: (rect: Rect, theme: *Color_Animation_Editor_Theme, state: *C
         for * key: state.color_keyframes {
             x := rect.x + rect.w * key.t;
             key.pos_x = x;
-            
+
             dist := abs(x - mouse_x_float);
             if (dist <= dist_max) && (dist < best_distance) {
                 best_distance = dist;
@@ -539,7 +539,7 @@ update_keyframes :: (rect: Rect, theme: *Color_Animation_Editor_Theme, state: *C
                     //
                     // :MaintainingIndices
                     //
-                    
+
                     // If color picker was open to the current index, close it.
                     current := best_keyframe_index;
                     if state.color_picker_keyframe_index == current {
@@ -609,13 +609,13 @@ draw_color_keyframe :: (index: int, rect: Rect, theme: *Color_Animation_Editor_T
     dy := dx;
 
     inset := dx * theme.keyframe_inset_ratio;
-    
+
     inset_y0 := rect.y + inset;
     inset_y1 := rect.y + rect.h - inset;
-    
+
     pa := v3(rect.x + t * rect.w, inset_y0, 0);
     pb := v3(rect.x + t * rect.w, inset_y1, 0);
-    
+
     color := lerp(theme.keyframe_color_inactive, theme.keyframe_color_active, key.active_t);
     color  = lerp(color, theme.keyframe_color_picking, key.color_picking_t);
 
@@ -646,7 +646,7 @@ draw_color_keyframe :: (index: int, rect: Rect, theme: *Color_Animation_Editor_T
         q0 := p0 + unit_vector(v0) * backing;
         q1 := p1 + unit_vector(v1) * backing;
         q2 := p2 + unit_vector(v2) * backing;
-        
+
         q3 := p3 + unit_vector(v3) * backing;
         q4 := p4 + unit_vector(v4) * backing;
         q5 := p5 + unit_vector(v5) * backing;
@@ -659,7 +659,7 @@ draw_color_keyframe :: (index: int, rect: Rect, theme: *Color_Animation_Editor_T
     // Draw the foreground triangle.
     draw_procs.immediate_triangle(p0, p1, p2, color, color, color);
     draw_procs.immediate_triangle(p3, p4, p5, color, color, color);
-}    
+}
 
 copy_output_to_clipboard :: (state: *Color_Animation_Editor_State, output_type: Output_Type) {
     Clipboard :: #import "Clipboard";
@@ -671,7 +671,7 @@ copy_output_to_clipboard :: (state: *Color_Animation_Editor_State, output_type: 
         samples: [..] Vector4;
         samples.allocator = temp;
         array_resize(*samples, num_samples);
-        
+
         interpolation := get_interpolation(state);
         sorted := get_sorted_keyframes(state);
         generate_color_samples(sorted, interpolation, samples);
@@ -680,17 +680,17 @@ copy_output_to_clipboard :: (state: *Color_Animation_Editor_State, output_type: 
         for samples {
             print_to_builder(*builder, ".%, ", it);
         }
-        
+
         append(*builder, "]");
       case .SOURCE_KEYFRAMES;
         append(*builder, "Color_Keyframe.[");
         for * state.color_keyframes {
             print_to_builder(*builder, ".{.%, %}, ", it.color_rgb, it.t);
         }
-        
+
         append(*builder, "]");
     }
-    
+
     text := builder_to_string(*builder);
     Clipboard.os_clipboard_set_text(text);
 }
@@ -702,7 +702,7 @@ init_color_by_interpolation :: (state: *Color_Animation_Editor_State, keyframe_i
     interp := get_interpolation(state);
 
     temp_colors := make_temp_colors(sorted, interp.color_space);
-    
+
     index := find_index_of_t(sorted, key.t);  // May return -1.
     key.color_rgb = interpolate_one_sample(index, key.t, interp, sorted, temp_colors);
 }
@@ -712,14 +712,14 @@ make_temp_colors :: (sorted: [] *$T/Color_Keyframe, space: type_of(Interpolation
     result.allocator = temp;
 
     array_resize(*result, sorted.count);
-    
+
     for sorted {
         rgb := pow(it.color_rgb.xyz, GAMMA);
 
         // We are ignoring the part of sRGB where it goes linear
         // at really low intensities. Maybe we will care about that
         // someday. But probably not.
-        
+
         if #complete space == {
             case;         #through;
             case .RGB;    result[it_index] = rgb;
@@ -736,7 +736,7 @@ make_temp_colors :: (sorted: [] *$T/Color_Keyframe, space: type_of(Interpolation
 //
 generate_color_samples :: (sorted: [] *$T/Color_Keyframe, interp: Interpolation, output_samples: [] Vector4) {
     if !output_samples.count return;
-    
+
     // The 'native' color is always stored in RGB. But we will compute
     // temp_colors for all keys if interp != .RGB:
 
@@ -760,7 +760,7 @@ generate_color_samples :: (sorted: [] *$T/Color_Keyframe, interp: Interpolation,
         output_samples[0] = sorted[0].color_rgb;  // Just skip over gamma and un-gamma. Yay.
         return;
     }
-    
+
     temp_colors := make_temp_colors(sorted, interp.color_space);
 
     for i: 0..output_samples.count-1 {
@@ -771,7 +771,7 @@ generate_color_samples :: (sorted: [] *$T/Color_Keyframe, interp: Interpolation,
                 color_cursor += 1;
             }
         }
-        
+
         output_samples[i] = interpolate_one_sample(color_cursor, t, interp, sorted, temp_colors);
     }
 }
@@ -804,7 +804,7 @@ interpolate_one_sample :: inline (i0: int, t: float, interp: Interpolation, sort
         if i0 < 0               i0 = 0;
         if i1 >= sorted.count   i1 = sorted.count-1;
     }
-    
+
     k0 := sorted[i0];
     k1 := sorted[i1];
 
@@ -815,19 +815,19 @@ interpolate_one_sample :: inline (i0: int, t: float, interp: Interpolation, sort
         if t1 < t0  t1 += 1;
         if t  < t0  t  += 1;
     }
-    
-    
+
+
     denom := t1 - t0;
     if !denom denom = 1;
-    
+
     tt := (t - k0.t) / denom;
     rgba: Vector4 = ---;
-    
+
     geometry := interp.geometry;
 
     c0 := *temp_colors[i0];
     c1 := *temp_colors[i1];
-    
+
     rgb: Vector3 = ---;
     if #complete interp.color_space == {
       case .RGB; #through;
@@ -863,9 +863,9 @@ interpolate_one_sample :: inline (i0: int, t: float, interp: Interpolation, sort
             s = hermite(c0.y, c1.y, tt);
             v = hermite(c0.z, c1.z, tt);
         }
-        
+
         rgb.x, rgb.y, rgb.z = hsv_to_rgb(h, s, v);
-        
+
       case .OKLAB;
         lab: Vector3 = ---;
         if geometry == {
@@ -966,7 +966,7 @@ linear_srgb_to_oklab :: (c: Vector3) -> Vector3 {
 
         result := pow(f, 1/3.0) * sign;
         return result;
-    }        
+    }
 
     l_ := cube_root(l);
     m_ := cube_root(m);
@@ -1003,7 +1003,7 @@ set_interpolation :: (using state: *Color_Animation_Editor_State, interp: Interp
     interpolation_color_space_s32  = cast(s32) interp.color_space;
     interpolation_geometry_s32     = cast(s32) interp.geometry;
     interpolation_wrapping         = interp.wrapping;
-}    
+}
 
 set_keyframes :: (state: *Color_Animation_Editor_State, frames: [] Color_Keyframe) {
     array_reset(*state.color_keyframes);
@@ -1020,7 +1020,7 @@ get_keyframes :: (state: *Color_Animation_Editor_State) -> [] Color_Keyframe { /
 
     sorted := get_sorted_keyframes(state);
     for sorted  result[it_index] = it.base;
-    
+
     return result;
 }
 
@@ -1036,16 +1036,16 @@ Color_Animation_Editor_Theme :: struct {
     keyframe_width_relative_to_bar_height_nondragging := 0.10;
     keyframe_scale_when_dragging      := 1.5;
     keyframe_scale_when_color_picking := 1.3;
-    
+
     keyframe_selection_size_relative_to_visual_size := 1.4;
     keyframe_inset_ratio   := 0.8;
     keyframe_backing_ratio := 0.24;
-    
+
     background: Background_Theme;
     background.shape.roundedness_type     = .ABSOLUTE_FROM_GLOBAL;
     background.shape.frame_thickness_type = .ABSOLUTE_FROM_GLOBAL;
     background.shape.rounding_flags       = .SOUTH;
-    
+
     background.color                      = Vector4.{.00, .10, .10, 1};
 
 
@@ -1056,12 +1056,12 @@ Color_Animation_Editor_Theme :: struct {
     time_view_subwindow_theme.region_background.frame_color  = .{0.28, 0.28, 0.28, 1.0};
     time_view_subwindow_theme.region_background.color        = .{0.05, 0.05, 0.05, 1.0};
 
-    
+
     button_theme:                 Button_Theme;
 
     label_theme:                  Label_Theme;
     label_theme.alignment = .Right;
-    
+
     number_input_theme:           Number_Input_Theme;
     dropdown_theme:               Dropdown_Theme;
     checkbox_theme:               Checkbox_Theme;
@@ -1078,7 +1078,7 @@ Color_Animation_Editor_Theme :: struct {
         INTERPOLATION_CONTROLS :: 0x01;
         TIME_VIEW ::              0x02;
         SAMPLING_CONTROLS ::      0x04;
-        COPY_TO_CLIPBOARD  ::     0x08;  
+        COPY_TO_CLIPBOARD  ::     0x08;
     }
     DRAW_ALL_SUBWIDGETS :: Draw_Subwidgets_Flags.INTERPOLATION_CONTROLS | Draw_Subwidgets_Flags.TIME_VIEW | Draw_Subwidgets_Flags.SAMPLING_CONTROLS | Draw_Subwidgets_Flags.COPY_TO_CLIPBOARD;
     draw_subwidgets_flags: Draw_Subwidgets_Flags = DRAW_ALL_SUBWIDGETS;
@@ -1086,7 +1086,7 @@ Color_Animation_Editor_Theme :: struct {
 
 Color_Animation_Editor_State :: struct #type_info_none {
     #as using widget: Active_Widget;
-    
+
     ring_point     := Vector2.{1, 0};
     disc_point     := Vector2.{1, 0};
 
@@ -1100,12 +1100,12 @@ Color_Animation_Editor_State :: struct #type_info_none {
 
     time_view_subwindow_info: Subwindow_Info;
     time_view_subwindow_info.open = false;
-    
+
     color_picker_editing_color_applied: Vector3;  // Not really used currently. This is updated when the user clicks 'Apply'. For now we just read the color off every frame.
-    
+
     color_picker_subwindow_rect_initialized := false;
     time_view\  _subwindow_rect_initialized := false;
-    
+
     theme: *Color_Animation_Editor_Theme; // Ephemeral; used only when employing the color picker callback.
 
     last_color_picker_state: *Color_Picker_State;  // Used so that we update the color in the main loop...
@@ -1124,7 +1124,7 @@ Color_Animation_Editor_State :: struct #type_info_none {
     time_view_period: float;
     time_view_playing := true;
     time_view_current_time: float64;
-    
+
     // The actual long-term color data:
     color_keyframes: [..] Augmented_Keyframe;
 }
@@ -1160,7 +1160,7 @@ Augmented_Keyframe :: struct {
 
     dragging_t:      float;  // For color animation; interpolates up and down.
     color_picking_t: float;  // If the color picker is editing this guy, then 1, else 0.
-    
+
     pos_x: float;  // X position in screen coordinates for this frame.
 }
 

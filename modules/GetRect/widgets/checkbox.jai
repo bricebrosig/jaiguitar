@@ -1,51 +1,55 @@
 // This is a version of a radio_button where you pass a pointer to an enum, as well as which enum member
 // this checkbox represents. But text is still manually indicated.
-radio_button :: (r: Rect, text: string, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> bool {
+radio_button :: (r: Rect, text: string, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> changed: bool, checkbox_state: Checkbox_State {
     selected := (current_value.* == button_value);
 
-    if base_checkbox(r, text, selected, theme, identifier, loc) {
+    changed, checkbox_state := base_checkbox(r, text, selected, theme, identifier, loc);
+    if changed {
         current_value.* = button_value;
-        return true;
+        return true, checkbox_state;
     }
-    
-    return false;
+
+    return false, checkbox_state;
 }
 
 // In this version of radio_button, we generate the text from the enum name. For when you want to be
 // extra lazy.
-radio_button :: (r: Rect, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> bool {
+radio_button :: (r: Rect, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> changed: bool, checkbox_state: Checkbox_State {
     text := tprint("%", button_value);  // We make a copy so that we can iterate and make underscores into spaces.
     for 0..text.count-1 {
         if text[it] == #char "_"  text[it] = #char " ";  // Convert underscores to spaces!
     }
 
-    return radio_button(r, text, current_value, button_value, theme, identifier, loc);
+    changed, checkbox_state := radio_button(r, text, current_value, button_value, theme, identifier, loc);
+    return changed, checkbox_state;
 }
 
 
 // Similar to what we just did, but these are for enum_flags.
 // First, the one with the explicit string:
-checkbox_flags :: (r: Rect, text: string, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> bool {
+checkbox_flags :: (r: Rect, text: string, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> changed: bool, checkbox_state: Checkbox_State {
     selected := cast(bool)(current_value.* & button_value);
-    if base_checkbox(r, text, selected, theme, identifier, loc) {
+    changed, checkbox_state := base_checkbox(r, text, selected, theme, identifier, loc);
+    if changed {
         current_value.* ^= button_value;
-        return true;
+        return true, checkbox_state;
     }
-    
-    return false;
+
+    return false, checkbox_state;
 }
 
 // Here is a checkbox_flags with lazy string generation:
-checkbox_flags :: (r: Rect, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> bool {
+checkbox_flags :: (r: Rect, current_value: *$Enum, button_value: Enum, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> changed: bool, checkbox_state: Checkbox_State {
     text := tprint("%", button_value);  // We make a copy so that we can iterate and make underscores into spaces.
     for 0..text.count-1 {
         if text[it] == #char "_"  text[it] = #char " ";
     }
-    
-    return checkbox_flags(r, text, current_value, button_value, theme, identifier, loc);
+
+    changed, checkbox_state := checkbox_flags(r, text, current_value, button_value, theme, identifier, loc);
+    return changed, checkbox_state;
 }
 
-base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> bool {
+base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme = null, identifier: s64 = 0, loc := #caller_location) -> changed: bool, checkbox_state: Checkbox_State {
     r := _r;
 
     hash  := get_hash(loc, identifier);
@@ -53,7 +57,7 @@ base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme
     defer stop_using_state(state);
 
     if !theme  theme = *default_overall_theme.checkbox_theme;
-    
+
     label_theme := theme.label_theme;
     font := label_theme.font;
     if !font {
@@ -64,10 +68,10 @@ base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme
     text_width, text_height := text_size(font, text);
     box_size := text_height - 1;
     if box_size > r.h  box_size = r.h;  // So that we don't get too big when putting these in a row. (text height is often misreported as being too high!)
-    
+
     w := r.w;
     h := r.h;
-    
+
     status := get_status_flags(r);
     box_x := r.x;
     box_y := r.y + floor((h - box_size + 1) / 2);
@@ -88,7 +92,7 @@ base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme
             vibration = box_size * ct * .05 * damp;
         }
     }
-    
+
     button_theme := theme.button_theme;  // Copy this so we can change colors due to being selected.
     button := *button_theme;
 
@@ -99,18 +103,18 @@ base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme
         denom := button.press_duration;
         if !denom denom = 1;
         rate   := ifx selected then 1.0/denom else 1.0;
-        
+
         dt := current_dt;
         state.selected_t = move_toward(state.selected_t, target, dt * rate);  // Actually, let this be slow, so that the color change due to being pressed dominates the experience.
 
         button.surface_color = lerp(button.surface_color, theme.button_color_selected, state.selected_t);
         button.text_color       = lerp(button.text_color, theme.text_color_selected,   state.selected_t);
     }
-    
+
     //
     // The bitmap part:
     //
-    
+
     b := box_size + vibration;
     center_x := box_x + box_size * .5;
     center_y := box_y + box_size * .5;
@@ -121,7 +125,7 @@ base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme
     } else {
         image = ifx selected then map_checkbox_full else map_checkbox_empty;
     }
-    
+
     image_rect := get_rect(center_x-b*.5, center_y-b*.5, b, b);
 
     changed := cast(bool)(status & .PRESSED);
@@ -130,22 +134,22 @@ base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme
     if changed {
         active_widget_deactivate_all();
     }
-    
+
     image_color := lerp(button.surface_color, button.surface_color_over,  state.base.over_factor);
     image_color  = lerp(image_color,          button.surface_color_down,  state.base.down_effect_t);
     image_color  = lerp(image_color,          button.surface_color_flash, state.base.pressed_factor);
-    
+
     draw_procs.set_shader_for_images(image);
     {
         p0, p1, p2, p3 := get_quad(image_rect);
         draw_procs.immediate_quad(p0, p1, p2, p3, image_color);
         draw_procs.immediate_flush();
     }
-    
+
 
     // If we are going from unselected to selected, then make selected_t be at least as high as pressed_factor,
     // so that by the time we reach the
-    
+
     //
     // The text part:
     //
@@ -158,7 +162,7 @@ base_checkbox :: (_r: Rect, text: string, selected: bool, theme: *Checkbox_Theme
 
     label(r, text, *label_theme);  // @Speed: Text was already prepped, we could tell that somehow.
 
-    return changed;
+    return changed, state;
 }
 
 
@@ -169,9 +173,9 @@ Checkbox_Theme :: struct {
     // Button_Theme's surface_color, etc are used for the checkbox bitmap.
     surface_color         = .{.55, .55, .55, 1.0};
     surface_color_over    = .{.80, .80, .80, 1.0};
-    surface_color_flash   = .{.90, .70, .90, 1.0}; 
+    surface_color_flash   = .{.90, .70, .90, 1.0};
     surface_color_down    = .{.90, .70, .90, 1.0};  // When held down.
-    
+
     text_color               = .{.55, .55, .55, 1.0};
     text_color_over          = .{.80, .80, .80, 1.0};
     text_color_pressed       = .{.90, .70, .90, 1.0};
@@ -189,8 +193,8 @@ Checkbox_Theme :: struct {
 
 Checkbox_State :: struct #type_info_none {
     #as using widget: Active_Widget;
-    
+
     base: Button_State;
     selected_t := 0.0;
-}    
+}
 

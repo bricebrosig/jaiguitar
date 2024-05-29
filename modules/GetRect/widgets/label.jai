@@ -13,7 +13,7 @@ text_origin :: (theme: *Label_Theme, font: *Font, r: Rect, text_width: float) ->
 
     // theme.font is ignored, so that people can pass in a substituted font.
     // However, other properties like alignment, baseline, etc are used here.
-    
+
     x := r.x;
 
     if #complete theme.alignment == {
@@ -25,7 +25,7 @@ text_origin :: (theme: *Label_Theme, font: *Font, r: Rect, text_width: float) ->
         ems := theme.alignment_pad_ems * font.em_width;
         x += (r.w - text_width) - em(theme.alignment_pad_ems, font);
     }
-    
+
     // y := text_baseline(font, y, y+r.h);
     vert := theme.text_baseline_vertical_position;
     if vert == FLOAT32_INFINITY {
@@ -33,7 +33,7 @@ text_origin :: (theme: *Label_Theme, font: *Font, r: Rect, text_width: float) ->
     } else {
         vert *= r.h;
     }
-    
+
     y := r.y + vert;
 
     // Due to atlassed texture rendering, we draw text at integer coordinates currently.
@@ -49,7 +49,7 @@ text_origin :: (theme: *Label_Theme, font: *Font, r: Rect, text_width: float) ->
 // we have a version of label that uses prepped text. To Be Continued...
 label_from_prepared_text :: (r: Rect, font: *Font, theme: *Label_Theme, do_scissor := true) {
     assert(font != null);  // Font must be specified to use this, because that is where the prepared text is stored. That is why the font is passed specifically.
-        
+
     text_width := cast(float) font.temporary_glyphs_width_in_pixels;
     if (text_width > r.w) && do_scissor        push_scissor(r);
     defer if (text_width > r.w) && do_scissor  pop_scissor();
@@ -58,10 +58,10 @@ label_from_prepared_text :: (r: Rect, font: *Font, theme: *Label_Theme, do_sciss
     draw_procs.draw_prepared_text(font, xx text_x, xx text_y, theme.text_color, theme.effects);
 }
 
-label :: (r: Rect, text: string, theme: *Label_Theme, do_scissor := true) {
+label :: (r: Rect, text: string, theme: *Label_Theme, do_scissor := true) -> desired_width: float {
     font := theme.font;
     if !font  font = get_default_font_at_size(r.h *.65);
-	if !font return; // :NullFont
+	if !font return 0; // :NullFont
 
     text_width := cast(float) draw_procs.prepare_text(font, text, theme.effects);
 
@@ -70,4 +70,6 @@ label :: (r: Rect, text: string, theme: *Label_Theme, do_scissor := true) {
 
     text_x, text_y := text_origin(theme, font, r, text_width);
     draw_procs.draw_prepared_text(font, xx text_x, xx text_y, theme.text_color, theme.effects);
+
+    return text_width;
 }

@@ -4,7 +4,7 @@
 // Square-to-circle warp option on sphere picker.
 // Dark / light options on circle picker.
 // Nicer-looking dot product sphere option on circle picker.
-// 
+//
 
 MAX_STASHED_COLORS :: 10;
 
@@ -30,14 +30,14 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
     left_margin, remainder := cut_left(non_top, ipad_x);
     right_margin, middle   := cut_right(remainder, ipad_x);
 
-    istashed_color_width := floor(r.w * theme.stashed_color_width + .5);    
+    istashed_color_width := floor(r.w * theme.stashed_color_width + .5);
     stashed_color_area, left2 := cut_right(middle, istashed_color_width);
 
     junk, circle_plus_extra := cut_right(left2, floor(r.w * theme.margin_between_color_input_and_stashed_colors + .5));
 
     circle_area_width  := circle_plus_extra.w;
     circle_area_height := circle_area_width;
-    
+
     circle_area, junk2 := cut_top(circle_plus_extra, circle_area_height);
 
     junk3, controls_area := cut_top(middle, circle_area_height + ipad_y);
@@ -56,15 +56,15 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
 
     circle_r0 := circle_area.w * (theme.inner_circle_diameter) * .5;
     circle_r1 := circle_area.w * (theme.outer_circle_diameter) * .5;
-    
+
     if created {
         state.original_rgb_color = input_and_output_color_rgb.*;
         state.color_pick_mode = theme.starting_color_pick_mode;
         set_current_color_rgb(state, theme, state.original_rgb_color);
-        
+
         for theme.initial_stashed_colors  array_add(*state.stashed_colors, it);
     }
-    
+
     status := get_status_flags(circle_area);
 /*
     if (status & .OVER) && (mouse_button_right_state & .START) {
@@ -75,7 +75,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
 
     dt := current_dt;
     update_animation_values(state, dt); // Note: We could have faster responsiveness if we do a separate update then draw cycle, or if we do special bumping of variables when e.g. button presses happen...
-    
+
     if state.color_pick_mode == {
       case .HSV_CIRCLE;
         draw_hsv_circle (circle_area, theme, state, circle_r0, circle_r1);
@@ -89,15 +89,15 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
 
     //
     // Draw output swatches...
-    // 
+    //
     ypad := 0.0;  // @theme padding
 
     button_height := controls_area.h * .2;  // @Theme: Hardcoded
     buttons_area, controls_lower := cut_top(controls_area, controls_area.h * .2);  // @Theme: Hardcoded
-    
+
     swatch_y0 := buttons_area.y;
     applied := false;  // We will return this.
-    
+
     {
         //
         // We want the apply and revert buttons to span the same width as circle_area,
@@ -117,7 +117,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
         revert_theme.surface_color_over    = original_over;
         revert_theme.surface_color_down    = original_down;
         revert_theme.text_color            = original_text;
-        
+
         apply_theme := theme.apply_and_revert_button_theme;
         apply_theme.surface_color          = current;
         apply_theme.surface_color_over     = current_over;
@@ -126,7 +126,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
 
         revert_area := get_rect(x0a, swatch_y0, bottom_button_width, button_height);
         sub_hash := get_hash(#location(), 0);
-        if button(revert_area, theme.revert_string, *revert_theme, xx sub_hash, loc) {
+        if button(revert_area, theme.revert_string, *revert_theme, xx,no_check sub_hash, loc) {
             set_current_color_rgb(state, theme, state.original_rgb_color);
 //            transfer_color_to_selection(panel);
         }
@@ -136,7 +136,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
 
         apply_area := revert_area;
         apply_area.x += revert_area.w * 1.1;
-        if button(apply_area, theme.apply_string, *apply_theme, xx revert_hash, loc) {
+        if button(apply_area, theme.apply_string, *apply_theme, xx,no_check revert_hash, loc) {
             state.original_rgb_color     = state.current_rgb_color;
             input_and_output_color_rgb.* = state.current_rgb_color;
 
@@ -149,11 +149,11 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
 
         sub_hash = get_hash(#location(), 0);
         stash_hash := combine_hashes(hash, sub_hash);
-        pressed_stash, state_stash := button(stash_area, "", stash_theme, xx stash_hash, loc);
+        pressed_stash, state_stash := button(stash_area, "", stash_theme, xx,no_check stash_hash, loc);
         if pressed_stash {
             stash_color(state, state.current_rgb_color);
         }
-        
+
         {
             triangle_margin := stash_area.w * 0.25;
             p0, p1, p2, p3 := get_quad(stash_area);
@@ -170,7 +170,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
         }
     }
 
-    
+
     sa := stashed_color_area;
     {
         //
@@ -187,13 +187,13 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
 
         region_x0 := sa.x;
         region_width := sa.w;
-        
+
         button_width := sa.w;
         button_x0 := region_x0 + (region_width - button_width) * .5;
         button_x1 := button_x0 + button_width;
-        
+
         draw_procs.set_shader_for_color(true);
-        
+
         top_y := stash_y1;
         alpha := 1.0;
         shape := theme.stashed_colors_shape;
@@ -209,7 +209,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
             color_status := get_status_flags(color_rect);
             if can_see && (color_status & .OVER) {
                 m := margin;
-                
+
                 backing_rect := expand(color_rect, margin);
                 color := v4(.5, .1, .1, 1);  // @Incomplete @Theme
                 rounded_rectangle(backing_rect, shape, color, whiten(color, .5)); // @Theme
@@ -219,7 +219,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
                     // @Incomplete note_color_changes(panel, true);
                 }
             }
-            
+
             c := v4(it.x, it.y, it.z, alpha);
             {
                 h, s, v := rgb_to_hsv(it.x, it.y, it.z);
@@ -232,10 +232,10 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
                 Clamp(*v, 0, 1);
                 r, g, b := hsv_to_rgb(h, s, v);
                 frame_color_rgb := v4(r, g, b, alpha);
-                
+
                 rounded_rectangle(color_rect, shape, c, frame_color_rgb); // @Theme
             }
-            
+
             top_y -= button_size_y;
             top_y -= margin;
         }
@@ -251,7 +251,7 @@ color_picker :: (r: Rect, input_and_output_color_rgb: *Vector3, theme: *Color_Pi
         using state;
         still_dragging = dragging_in_ring || dragging_in_disc || dragging_in_h || dragging_in_h_zoom || dragging_in_s || dragging_in_l || dragging_in_r || dragging_in_g || dragging_in_b || dragging_in_hsv_rectangle;
     }
-    
+
     return applied, still_dragging, state;
 }
 
@@ -288,7 +288,7 @@ set_current_color_rgb :: (state: *Color_Picker_State, theme: *Color_Picker_Theme
             // The max check above is redundant with this I guess, so it's commented out.
             while hsv.x - theme.slider_hue_min > 360  hsv.x -= 360;
         }
-        
+
         if maintain_h != FLOAT32_INFINITY {
             // If we drag onto black or white, maintain continuity
             // in saturation and value, and just poke the lightness,
@@ -298,14 +298,14 @@ set_current_color_rgb :: (state: *Color_Picker_State, theme: *Color_Picker_Theme
             // would go there.
             hsv.x = maintain_h;
         }
-        
+
         set_current_color_hsv(state, hsv);
     }
 
     if update_disc_point {
         // We provide the option to not update the disc point, so that
         // while the user is actually moving the disc point around, we let them
-        // go wherever they want around the circumference; we don't want to 
+        // go wherever they want around the circumference; we don't want to
         // introduce numerical error by recomputing it, and we also don't want to
         // snap to the edges of arcs (to fix singularities) while the user is
         // freely moving.
@@ -347,7 +347,7 @@ backsolve_disc_point_from_hsv :: (state: *Color_Picker_State, h: float, s: float
     if state.circle_picker_in_warped_mode {
         return backsolve_disc_point_from_hsv_warp(h, s, v);
     }
-    
+
     // Some colors are not represented on the current disc!
     // To push them into disc space, we add an epsilon for now, which is kind of gross.
     // This doesn't affect the stored color though (unless you click on the disc, which
@@ -359,7 +359,7 @@ backsolve_disc_point_from_hsv :: (state: *Color_Picker_State, h: float, s: float
 
         s += EPSILON;
     }
-    
+
     if s > 1 - EPSILON {
         if v == 0  return .{0, -1};                 // Bottom middle for black.
         if v == 1  return unit_vector(v2(+1, +1));  // Upper-right corner for saturated color.
@@ -369,8 +369,8 @@ backsolve_disc_point_from_hsv :: (state: *Color_Picker_State, h: float, s: float
 
     if v < EPSILON      v = EPSILON;
     if v > 1 - EPSILON  v = 1 - EPSILON;
-    
-    
+
+
     // s := sin(tx * TAU * .25);
     // tx * TAU * .25 = asin(s);
     // tx = asin(s) * 4 / TAU;
@@ -391,12 +391,12 @@ backsolve_disc_point_from_hsv :: (state: *Color_Picker_State, h: float, s: float
         if s < .5  return unit_vector(v2(-1, -1));  // Upper-left corner for white.
         return unit_vector(v2(+1, +1));  // Upper-right corner for saturated color.
     }
-    
+
     ux_squared := (alpha - alpha*beta) / one_minus_ab;
 
     Clamp(*ux_squared, 0, 1);
     ux := sqrt(ux_squared);
-    
+
     uy := (ty - .5) * 2 * sqrt(1 - ux_squared);
     // state.disc_point.y = ty;
 
@@ -405,7 +405,7 @@ backsolve_disc_point_from_hsv :: (state: *Color_Picker_State, h: float, s: float
     // because we know which side it's on due to s.
 
     if tx < .5  ux = -ux;
-    
+
     // @Incomplete: toggled_s_t, toggled_v_t need to be handled.
 
     return v2(ux, uy);
@@ -413,7 +413,7 @@ backsolve_disc_point_from_hsv :: (state: *Color_Picker_State, h: float, s: float
 
 hsv_to_argb :: (hsv: Vector3) -> Vector4 {
     r, g, b := hsv_to_rgb(hsv.x, hsv.y, hsv.z);
-    return make_vector4(r, g, b, 1);
+    return rgba(r, g, b, 1);
 }
 
 #scope_file
@@ -450,7 +450,6 @@ color_slider :: (rect: Rect, index: Slider_Index, input_color: Vector3, value: *
     changed := false;
 
     if rect.h {
-        // ix, iy := current_mouse_x, current_mouse_y;
         drag_y := mouse_y_float;
 
         t := (drag_y - rect.y) / rect.h;
@@ -471,14 +470,14 @@ color_slider :: (rect: Rect, index: Slider_Index, input_color: Vector3, value: *
             // Side effects:
             value.* = t;
             changed = true;
-        }        
+        }
 
         pa := v3(rect.x,       rect.y + pip_t * rect.h, 0);
         pb := v3(rect.x + rect.w, rect.y + pip_t * rect.h, 0);
-        
+
         color := v4(k, k, k, 1);
         arrow_color = color;
-        
+
         p0 := pa;
         p1 := p0 + v3(-dx, dy * .5, 0);
         p2 := p1 + v3(0, -dy, 0);
@@ -528,9 +527,9 @@ color_slider :: (rect: Rect, index: Slider_Index, input_color: Vector3, value: *
             g = input_color.y;
             b = t;
         }
-        
+
         color   := v4(r, g, b, alpha);
-        
+
         if (i != 0) {
             draw_procs.immediate_triangle(to_vec3(last_p0), to_vec3(last_p1), to_vec3(p1), _last_color, _last_color, color);
             draw_procs.immediate_triangle(to_vec3(last_p0), to_vec3(p1), to_vec3(p0), _last_color, color, color);
@@ -566,7 +565,7 @@ color_slider :: (rect: Rect, index: Slider_Index, input_color: Vector3, value: *
 
             fade_zone_top    := rect.y + rect.h - fade_margin;
             fade_zone_bottom := rect.y + fade_margin;
-            
+
             h_denom := fade_margin;
             if !h_denom  h_denom = 1;
             excess_top := y_top - fade_zone_top;
@@ -580,7 +579,7 @@ color_slider :: (rect: Rect, index: Slider_Index, input_color: Vector3, value: *
                 alpha_bottom = 1 - (excess_bottom / h_denom);
                 Clamp(*alpha_bottom, 0, 1);
             }
-            
+
             color_inactive := Vector4.{.05, .05, .05, 1};  // @Theme
             color_active   := Vector4.{1, 1, 1, 1};  // @Theme
             color := lerp(color_inactive, color_active, state.dragging_in_h_t);
@@ -618,10 +617,10 @@ color_slider :: (rect: Rect, index: Slider_Index, input_color: Vector3, value: *
 
     draw_procs.immediate_flush();
 
-    
+
     focus := has_focus(rect);
     down  := focus && (mouse_button_left_state & .DOWN);
-    
+
     // Don't disable dragging until after we draw ... so we get at least
     // one update if we do an intra-frame click.
     if dragging.* {
@@ -667,16 +666,16 @@ color_rectangle :: (r: Rect, input_color: Vector3, value_x: *float, value_y: *fl
                 x1 := lerp(x_min, x_max, (i+1)*dt);
 
                 // s0..3 are circle-stretched points, without the center added.
-                q0 := v3(x0, y0, 0);  
-                q1 := v3(x1, y0, 0);  
-                q2 := v3(x1, y1, 0);  
-                q3 := v3(x0, y1, 0);  
+                q0 := v3(x0, y0, 0);
+                q1 := v3(x1, y0, 0);
+                q2 := v3(x1, y1, 0);
+                q3 := v3(x0, y1, 0);
 
                 s0 := (i*dt);
                 s1 := ((i+1)*dt);
                 v0 := (j*dt);
                 v1 := ((j+1)*dt);
-                
+
                 hsv0 := v3(h, s0, v0);
                 hsv1 := v3(h, s1, v0);
                 hsv2 := v3(h, s1, v1);
@@ -686,7 +685,7 @@ color_rectangle :: (r: Rect, input_color: Vector3, value_x: *float, value_y: *fl
                 c1 := hsv_to_argb(hsv1);
                 c2 := hsv_to_argb(hsv2);
                 c3 := hsv_to_argb(hsv3);
-                
+
                 draw_procs.immediate_triangle(q0, q1, q2, c0, c1, c2);
                 draw_procs.immediate_triangle(q0, q2, q3, c0, c2, c3);
             }
@@ -705,7 +704,7 @@ color_rectangle :: (r: Rect, input_color: Vector3, value_x: *float, value_y: *fl
 
             Clamp(*rectangle_point.x, 0, 1);
             Clamp(*rectangle_point.y, 0, 1);
-            
+
             value_x.* = rectangle_point.x;
             value_y.* = rectangle_point.y;
             changed = true;
@@ -720,10 +719,10 @@ color_rectangle :: (r: Rect, input_color: Vector3, value_x: *float, value_y: *fl
         pos.y += r.y;
         draw_2d_dragging_marker(pos, r.w*.2, state.dragging_in_hsv_rectangle_t);
     }
-    
+
     focus := has_focus(r);
     down  := focus && (mouse_button_left_state & .DOWN);
-    
+
     // Don't disable dragging until after we draw ... so we get at least
     // one update if we do an intra-frame click.
     if <<dragging {
@@ -751,12 +750,12 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
         between_width *= .7;
         left_margin = 0;
     }
-    
+
     hsv_color := state.current_hsv_color;
-    
+
     bar_x := area.x + left_margin;
     bar_y := area.y;
-    bar_height := area.h; 
+    bar_height := area.h;
 
     bar_x         = floor(bar_x + .5);
     bar_y         = floor(bar_y + .5);
@@ -764,7 +763,7 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
     bar_height    = floor(bar_height + .5);
     between_width = floor(between_width + .5);
     left_margin   = floor(left_margin + .5);
-    
+
     alpha := 1.0;
 
     hue_before_modifications := hsv_color.x;
@@ -786,7 +785,7 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
     // so maybe it wouldn't be disruptive, but I am a bit too tired to think about
     // that right now, so this is how we are doing it.  -jblow, 24 June 2021.
     //
-    extra_wrapped_hue := hue_before_modifications; 
+    extra_wrapped_hue := hue_before_modifications;
     while extra_wrapped_hue < theme.slider_hue_min  extra_wrapped_hue += 360;
     while extra_wrapped_hue > theme.slider_hue_max  extra_wrapped_hue -= 360;
 
@@ -794,7 +793,7 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
     if !hue_denom hue_denom = 1;
     h := (extra_wrapped_hue - theme.slider_hue_min) / hue_denom;
     r := get_rect(bar_x, bar_y, bar_width, bar_height);
-    
+
     changed_unzoomed_hue := color_slider(r, .HUE, hsv_color, *h, *state.dragging_in_h, state.dragging_in_h_t, alpha, theme, state);
     changed_hsv := changed_unzoomed_hue;
     if changed_unzoomed_hue {
@@ -807,7 +806,7 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
     hue_zoom_denom := (hue_zoom_high - hue_zoom_low);
     if !hue_zoom_denom  hue_zoom_denom = 1;
     h_zoom := (hue_before_modifications - hue_zoom_low) / hue_zoom_denom;
-    
+
     r.x += bar_width + between_width * .25;
     changed_zoomed_version := color_slider(r, .HUE_ZOOMED, hsv_color, *h_zoom, *state.dragging_in_h_zoom, state.dragging_in_h_zoom_t, alpha, theme, state);
     changed_hsv |= changed_zoomed_version;
@@ -819,9 +818,9 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
         margin := between_width*.5;
 
         x0 := r.x + bar_width + margin;
-        
+
         w := (area.x + area.w - x0);
-        
+
         rectangle_area: Rect;
         rectangle_area.x = x0;
         rectangle_area.y = bar_y;
@@ -831,11 +830,11 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
     } else {
         r.x += bar_width + between_width;
         changed_hsv |= color_slider(r, .SATURATION, hsv_color, *hsv_color.y, *state.dragging_in_s, state.dragging_in_s_t, alpha, theme, state);
-        
+
         r.x += bar_width + between_width;
         changed_hsv |= color_slider(r, .LIGHTNESS, hsv_color, *hsv_color.z, *state.dragging_in_l, state.dragging_in_l_t, alpha, theme, state);
     }
-    
+
     if changed_hsv {
         // We have to manually set current_color_rgb for the rgb_color to update. Sigh!
         set_current_color_hsv(state, hsv_color, changed_unzoomed_hue);
@@ -846,12 +845,12 @@ draw_hsv_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
 
 draw_rgb_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_State) {
     // @Copypasta from draw_hsv_sliders; maybe we could recombine them.
-    
+
     w := area.w;
     bar_width := w / 7;
     between_width := bar_width * .9;
     left_margin := 0.5 * (w - (3 * bar_width + 2 * between_width));
-    
+
     bar_x := area.x + left_margin;
     bar_y := area.y + w * .03;
     bar_height := w * .97;
@@ -862,18 +861,18 @@ draw_rgb_sliders :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picke
     bar_height    = floor(bar_height + .5);
     between_width = floor(between_width + .5);
     left_margin   = floor(left_margin + .5);
-    
+
     alpha := 1.0;
 
     rgb := state.current_rgb_color;
     r := get_rect(bar_x, bar_y, bar_width, bar_height);
-    
+
     changed_r   := color_slider(r, .RED,   rgb, *rgb.x, *state.dragging_in_r, state.dragging_in_r_t, alpha, theme, state);
     changed_rgb := changed_r;
 
     r.x += bar_width + between_width;
     changed_rgb |= color_slider(r, .GREEN, rgb, *rgb.y, *state.dragging_in_g, state.dragging_in_g_t, alpha, theme, state);
-    
+
     r.x += bar_width + between_width;
     changed_rgb |= color_slider(r, .BLUE,  rgb, *rgb.z, *state.dragging_in_b, state.dragging_in_b_t, alpha, theme, state);
 
@@ -891,12 +890,12 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
     column_width := (area.w - middle_margin) / NUM_COLUMNS;
     column1, rhs := cut_left(area, column_width);
     middle, column2 := cut_left(rhs, middle_margin);
-    
+
     label_theme := theme.type_ins_label_theme;
     label_theme.alignment = .Right;  // @Theme
     input_theme := theme.type_ins_input_theme;
     input_theme.alignment = .Left;  // @Theme
-    
+
     if !label_theme.font {
         // If they didn't supply a font in the label theme,
         // try to auto-pick a size that fits with the formatting
@@ -918,15 +917,15 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
         label_theme.font = font;
         input_theme.font = font;
     }
-    
+
     text: string;
-    
+
     line_height := cast(float)label_theme.font.character_height;
     top_pad := line_height; // @Theme
 
     label_rect, input_rect: Rect = ---;
     LABEL_RATIO :: 0.18;
-    
+
     //
     // RGB readout.
     //
@@ -935,7 +934,7 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
     ig := to_u8(c.y);
     ib := to_u8(c.z);
     hsv_color := state.current_hsv_color;
-    
+
     r := cut_top(column1, line_height);
     r.y -= top_pad;
 
@@ -959,7 +958,7 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
 
     //
     // Do another RGB that goes from 0-255.
-    // 
+    //
     r.y -= line_height;  // Extra blank line.
 
     label_rect, input_rect = cut_left(r, r.w * LABEL_RATIO);
@@ -980,7 +979,7 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
     changed_ib := number_input(input_rect, text, *ib, 0, 255, *input_theme);
     r.y -= line_height;
 
-    
+
     //
     // HSV readout.
     //
@@ -990,12 +989,12 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
     // if it wraps off the bottom or top due to zoom, etc ... we do not want it
     // to pop! (Recall that, at least right now, the hue slider goes more than
     // 360 degrees, so we want to remember where on that slider you were!)
-    
+
     printed_h := hsv_color.x;
     while printed_h < 0    printed_h += 360;
     while printed_h > 360  printed_h -= 360;
 
-    
+
     r = cut_top(column2, line_height);
     r.y -= top_pad;
 
@@ -1022,13 +1021,13 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
 
     if changed_s hsv_color.y = scaled_s / 100;
     if changed_v hsv_color.z = scaled_v / 100;
-    
+
     changed_hsv := (changed_h | changed_s | changed_v);
 
     if changed_r | changed_g | changed_b {
         set_current_color_rgb(state, theme, c);
     }
-    
+
     if changed_ir | changed_ig | changed_ib {
         rgb := state.current_rgb_color;
         if changed_ir  rgb.x = (ir / 255.0);
@@ -1058,7 +1057,7 @@ draw_type_ins :: (area: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_S
         b :=  (hex & 0x0000ff)        / 255.0;
         set_current_color_rgb(state, theme, v3(r, g, b));
     }
-    
+
     r.y -= line_height;
 }
 
@@ -1080,13 +1079,13 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
     r0 := circle_r0;
     r1 := circle_r1;
 
-    center := make_vector2(r.x + r.w * 0.5, r.y + r.w * 0.5);
+    center := Vector2.{r.x + r.w * 0.5, r.y + r.w * 0.5};
 
     status := get_status_flags(r);
     if (status & .OVER) && (mouse_button_right_state & .START) {
         toggle_circle_picker_mode(state);
     }
-    
+
     draw_procs.set_shader_for_color(true);
 
     {
@@ -1095,7 +1094,7 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
         p := unit_vector(state.ring_point) * (r0 + r1) * .5;
         state.ring_point = p;
     }
-    
+
     update_ring_point(state, center, r0, r1);
 
     last_p0, last_p1: Vector2 = ---;
@@ -1119,7 +1118,7 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
 
         r, g, b := hsv_to_rgb(h, s, v);
         color   := v4(r, g, b, alpha);
-        
+
         if (i != 0) {
             draw_procs.immediate_triangle(to_vec3(last_p0), to_vec3(last_p1), to_vec3(p1), last_color, last_color, color);
             draw_procs.immediate_triangle(to_vec3(last_p0), to_vec3(p1), to_vec3(p0), last_color, color, color);
@@ -1135,7 +1134,7 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
     if disc_r ir = 1.0/disc_r;
 
     update_disc_point(state, center, disc_r);
-    
+
     h := (360 / TAU) * atan2(state.ring_point.y, state.ring_point.x);
     if h < 0  h += 360;
 
@@ -1143,11 +1142,11 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
 
     draw_circle_at :: (center: Vector2, r: float, N: s32, color: Vector4) {
         if !N return;
-        
+
         dtheta := TAU / N;
 
         p0 := v3(center.x, center.y, 0);
-        
+
         // @Speed: Factor apart the loop below to save the previous points.
         for i: 0..N-1 {
             theta0 := dtheta * i;
@@ -1160,11 +1159,11 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
 
             p1 := v3(center.x + ct0 * r, center.y + st0 * r, 0);
             p2 := v3(center.x + ct1 * r, center.y + st1 * r, 0);
-        
+
             draw_procs.immediate_triangle(p0, p1, p2, color, color, color);
         }
     }
-    
+
     if state.circle_picker_in_warped_mode {
         // Draw the mickey mouse ears.
         rgb_white     := Vector4.{1, 1, 1, 1};
@@ -1178,10 +1177,10 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
         draw_circle_at(m_white     * disc_r + center, radius * disc_r, NUM_TRIANGLES, rgb_white);
         draw_circle_at(m_saturated * disc_r + center, radius * disc_r, NUM_TRIANGLES, rgb_saturated);
     }
-    
-    value_vector      := unit_vector(make_vector3(0, 1, 0));
-    saturation_vector := unit_vector(make_vector3(1, -1, 0));
-        
+
+    value_vector      := unit_vector(.{0, 1, 0});
+    saturation_vector := unit_vector(.{1, -1, 0});
+
     {
         // Draw a square now!
         r22 := sqrt(2.0) * .5;  // @Speed!
@@ -1220,18 +1219,18 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
                     hsv2 = make_hsv(state, h, s2*ir);
                     hsv3 = make_hsv(state, h, s3*ir);
                 }
-                
+
                 c0 := hsv_to_argb(hsv0);
                 c1 := hsv_to_argb(hsv1);
                 c2 := hsv_to_argb(hsv2);
                 c3 := hsv_to_argb(hsv3);
-                
+
                 // q0..3 are the points we render. Just the circle points plus the center.
                 q0 := s0 + center3;
                 q1 := s1 + center3;
                 q2 := s2 + center3;
                 q3 := s3 + center3;
-                
+
                 draw_procs.immediate_triangle(q0, q1, q2, c0, c1, c2);
                 draw_procs.immediate_triangle(q0, q2, q3, c0, c2, c3);
             }
@@ -1248,7 +1247,7 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
         } else {
             hsv = make_hsv(state, h, p);
         }
-        
+
         r, g, b := hsv_to_rgb(hsv.x, hsv.y, hsv.z);
         set_current_color_rgb(state, theme, v3(r, g, b), maintain_h=h, update_disc_point=false);
     }
@@ -1268,24 +1267,24 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
         triangle_border_width: float;
         border_color := v4(.05, .05, .05, .3); // @Theme
         triangle_color: Vector4;
-        
+
         {
             triangle_scale := lerp(.7, 1, state.dragging_in_ring_t);
             k := lerp(.05, 1, state.dragging_in_ring_t);  // Used for foreground color.
-            
+
             triangle_color = v4(k, k, k, 1);    // @Theme
-            
+
             apex_height = circle_r1 * .12 * triangle_scale;  // @Theme
             base_halfwidth := apex_height * .6;  // @Theme
-            
+
             triangle_border_width       = .25 * base_halfwidth;  // @Theme
             triangle_extension_distance = apex_height * lerp(.2, .45, state.dragging_in_ring_t);      // @Theme
-            
+
             triangle_apex := center + (circle_r1 + triangle_extension_distance - apex_height) * dir;
 
             draw_bordered_triangle(triangle_apex, apex_height, base_halfwidth, triangle_border_width, dir, triangle_color, border_color);
         }
-        
+
         rectangle_retraction_distance := triangle_extension_distance * .38; // @Theme
         rectangle_halfwidth := apex_height * .3; // @Theme
         rectangle_height    := apex_height * .35; // @Theme
@@ -1293,7 +1292,7 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
         rectangle_base := center + (circle_r0 - rectangle_retraction_distance) * dir;
         rectangle_apex := rectangle_base + rectangle_height * dir;
 
-        {            
+        {
             strut := v2(-dir.y, dir.x);
             b := rectangle_halfwidth;
             p0 := rectangle_base - strut * b;
@@ -1304,7 +1303,7 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
             bb := rectangle_border_width;
             bx := strut * bb;
             by := dir * bb;
-            
+
             barycenter := (p0 + p2) * .5;
             q0 := p0 - bx - by;
             q1 := p1 + bx - by;
@@ -1314,7 +1313,7 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
             inner := border_color;
             outer := border_color;
             outer.w = 0;
-            
+
             // Quads around the rectangle, for a border shadow:
             draw_procs.immediate_triangle(to_vec3(p0), to_vec3(q0), to_vec3(q1), inner, outer, outer);
             draw_procs.immediate_triangle(to_vec3(p0), to_vec3(q1), to_vec3(p1), inner, outer, inner);
@@ -1333,14 +1332,14 @@ draw_hsv_circle :: (r: Rect, theme: *Color_Picker_Theme, state: *Color_Picker_St
             draw_procs.immediate_triangle(to_vec3(p0), to_vec3(p2), to_vec3(p3), triangle_color, triangle_color, triangle_color);
         }
     }
-    
+
     //
     // Draw the color marker for the disc point.
     //
     {
         w   := r.w * .15;
         pos := center + state.disc_point * disc_r;
-            
+
         draw_2d_dragging_marker(pos, w, state.dragging_in_disc_t);
     }
 }
@@ -1349,20 +1348,20 @@ draw_2d_dragging_marker :: (pos: Vector2, w: float, dragging_t: float) {
     j := lerp(1, .05, dragging_t);
     k := lerp(.05, 1, dragging_t);
     triangle_scale := lerp(.24, .35, dragging_t);
-    
+
     color := v4(k, k, k, 1);    // @Theme
     border_color := v4(j, j, j, .3); // @Theme
-    
+
     apex_height := w * .5 * triangle_scale;  // @Theme
     base_halfwidth := apex_height * .6;  // @Theme
     triangle_distance_from_center := w * .6 * triangle_scale; // @Theme
-    
+
     border_width       := lerp(.7 * base_halfwidth, .45 * base_halfwidth, dragging_t);
-    triangle_apex_N := pos + make_vector2(0, triangle_distance_from_center);
-    triangle_apex_S := pos + make_vector2(0, -triangle_distance_from_center);
-    triangle_apex_E := pos + make_vector2(triangle_distance_from_center, 0);
-    triangle_apex_W := pos + make_vector2(-triangle_distance_from_center, 0);
-    
+    triangle_apex_N := pos + .{0, triangle_distance_from_center};
+    triangle_apex_S := pos + .{0, -triangle_distance_from_center};
+    triangle_apex_E := pos + .{triangle_distance_from_center, 0};
+    triangle_apex_W := pos + .{-triangle_distance_from_center, 0};
+
     draw_bordered_triangle(triangle_apex_N, apex_height, base_halfwidth, border_width, .{0, 1},  color, border_color);
     draw_bordered_triangle(triangle_apex_S, apex_height, base_halfwidth, border_width, .{0, -1}, color, border_color);
     draw_bordered_triangle(triangle_apex_E, apex_height, base_halfwidth, border_width, .{1, 0},  color, border_color);
@@ -1412,8 +1411,8 @@ update_ring_point :: (state: *Color_Picker_State, center: Vector2, r0: float, r1
     // If we aren't doing anything, bail out early.
     if !(state.dragging_in_ring || (mouse_button_left_state & .START)) return;
     if events_occluded() return;
-    
-    pos := make_vector2(mouse_x_float, mouse_y_float);
+
+    pos := Vector2.{mouse_x_float, mouse_y_float};
     pos -= center;
 
     clamped := pos;
@@ -1422,7 +1421,7 @@ update_ring_point :: (state: *Color_Picker_State, center: Vector2, r0: float, r1
     orig_len := len;
 
     Clamp(*len, r0, r1);
-    normalize_or_zero(*clamped);
+    normalize(*clamped);
     clamped *= len;
 
     inside := true;
@@ -1441,9 +1440,9 @@ update_ring_point :: (state: *Color_Picker_State, center: Vector2, r0: float, r1
 
     if state.dragging_in_ring {
         state.ring_point = clamped;
-        normalize_or_zero(*state.ring_point);
+        normalize(*state.ring_point);
         state.ring_point *= (r0 + r1) * 0.5;
-        
+
         if mouse_button_left_state & .DOWN {
             // note_color_changes(panel, false);
         } else {
@@ -1479,7 +1478,7 @@ make_hsv_warp_from_disc_point :: (h: float, x: float, y: float) -> Vector3 {
     else sy = 1;
 
     total_len := sqrt(sx*sx+sy*sy);
-    
+
     // Multiply by (len / radius), but radius is 1, so...
 
     p := v3(h, (x*total_len + 1) * .5, (y*total_len + 1) * .5);  // Map from [-1, 1] to [0, 1].
@@ -1487,7 +1486,7 @@ make_hsv_warp_from_disc_point :: (h: float, x: float, y: float) -> Vector3 {
     Clamp(*p.z, 0, 1);
     return p;
 }
-                    
+
 make_hsv :: (state: *Color_Picker_State, h: float, p: Vector3) -> Vector3 {
     u := p;
     saturate :: (f: float) -> float {
@@ -1495,7 +1494,7 @@ make_hsv :: (state: *Color_Picker_State, h: float, p: Vector3) -> Vector3 {
         if f > 1 return 1;
         return f;
     }
-    
+
     y_range := sqrt(saturate(1 - u.x*u.x));
     x_range := sqrt(saturate(1 - u.y*u.y));
 
@@ -1514,7 +1513,7 @@ make_hsv :: (state: *Color_Picker_State, h: float, p: Vector3) -> Vector3 {
     s = lerp(s, s*s, state.toggled_s_t);
     v = lerp(v, v*v, state.toggled_v_t);
 
-    return make_vector3(h, s, v);
+    return .{h, s, v};
 }
 
 image_quad_centered_at :: (pos: Vector2, w: float, h: float, color: Vector4) {
@@ -1535,7 +1534,7 @@ get_color_watch_colors :: (theme: *Color_Picker_Theme, rgb: Vector3) -> (rgba: V
     // white_zone := values_are_close(rgb, .{1,1,1}, 0.2);
     luminance := dot_product(rgb, .{.299, .587, .114});
     white_zone := (luminance > .65);
-    
+
     over:     Vector4 = ---;
     pressed:  Vector4 = ---;
     text:     Vector4 = ---;
@@ -1570,14 +1569,14 @@ update_disc_point :: (state: *Color_Picker_State, center: Vector2, radius: float
     // if !buttons_active  return;
     if !radius return;
     if events_occluded() return;  // @Cleanup: Maybe shouldn't be checking this manually, it's messy?
-    
+
     pos := v2(mouse_x_float, mouse_y_float);
     delta := pos - center;
     len_orig := length(delta);
     len := len_orig;
     inside := (len_orig <= radius);
     disc_point := delta / radius;
-    
+
     // If we are inside a mickey mouse ear, don't clamp the radius.
     if state.circle_picker_in_warped_mode && !inside {
         center_white, center_saturated, ear_radius := get_mickey_mouse_ears();
@@ -1601,7 +1600,7 @@ update_disc_point :: (state: *Color_Picker_State, center: Vector2, radius: float
         Clamp(*len, 0, radius);
         disc_point = unit_vector(delta) * (len / radius);
     }
-    
+
     if inside && !state.dragging_in_disc {
         if mouse_button_left_state & .START {
             state.dragging_in_disc = true;
@@ -1612,7 +1611,7 @@ update_disc_point :: (state: *Color_Picker_State, center: Vector2, radius: float
         if radius {
             state.disc_point = disc_point;
         }
-        
+
         if mouse_button_left_state & .DOWN {
             // note_color_changes(panel, false);
         } else {
@@ -1667,7 +1666,7 @@ hsv_to_rgb :: (h: float, s: float, v: float) -> (r: float, g: float, b: float) {
     if s < 0 {       // < is bogus, just shuts up warnings
         return v, v, v;
     }
-    
+
     hh := h;
     if hh >= 360  hh = 0;
     hh /= 60;
@@ -1708,10 +1707,10 @@ get_inscribed_square_intersector_length :: (x: float, y: float) -> float {
     // There, we are intersecting with the line x == root2 / 2.
     x = abs(x);
     y = abs(y);
-    
+
     if y > x  Swap(*x, *y);
     if x < .0001  return 1;  // Avoid the singularity!
-    
+
     len := sqrt(.5 + .5 * (y*y)/(x*x));
     return len;
 }
@@ -1736,7 +1735,7 @@ update_animation_values :: (using state: *Color_Picker_State, dt: float) {
 
     animate(*toggled_s_t, toggled_s, dt, UP_RATE, DOWN_RATE);
     animate(*toggled_v_t, toggled_v, dt, UP_RATE, DOWN_RATE);
-    
+
 //    animate(*hue_zoom_t, hue_zooming, dt, UP_RATE, DOWN_RATE);
 }
 
@@ -1768,7 +1767,7 @@ draw_mode_switch_buttons :: (state: *Color_Picker_State, theme: *Color_Picker_Th
         if it == 1  texture = map_mode_hsv;
         if it == 2  texture = map_mode_rgb;
         if it == 3  texture = map_mode_numbers;
-        pressed := button(r, "", *theme.mode_switch_button_theme, xx button_hash, loc, texture=texture);
+        pressed := button(r, "", *theme.mode_switch_button_theme, xx,no_check button_hash, loc, texture=texture);
         if pressed {
             // active_widget_deactivate_all(state);  // Don't reflect incorrect values that may be in the text field if the user clicks on a color, etc. But actually, deactivate everything anyway, because it's a click. Except, button() already does this.
             new_mode := cast(Color_Pick_Mode) it;
@@ -1781,7 +1780,7 @@ draw_mode_switch_buttons :: (state: *Color_Picker_State, theme: *Color_Picker_Th
                   case .HSV_SLIDERS;
                     toggle_rectangle_picker_mode(state);
                 }
-                
+
             } else {
                 state.color_pick_mode = new_mode;
             }
@@ -1827,9 +1826,9 @@ to_u8 :: (f: float) -> u8 {
     ival: s32 = cast(s32) floor(f * 255 + .5);
 
     Clamp(*ival, 0, 255);  // Just in case we had some float out-of-rangeness...!
-    
+
     return cast,no_check(u8) ival;
-}    
+}
 
 get_mickey_mouse_ears :: () -> (center_white: Vector2, center_saturated: Vector2, radius: float) {
     r22 := sqrt(2.0) * .5;  // @Speed!
@@ -1842,7 +1841,7 @@ get_mickey_mouse_ears :: () -> (center_white: Vector2, center_saturated: Vector2
 Color_Picker_Theme :: struct {
     horizontal_padding  := .06;   // Relative to rect.w.
     vertical_padding    := .06;   // Relative to rect.w. (This is not a mistake.)
-    
+
     stashed_color_width := .10;   // Relative to rect.w.
     margin_between_color_input_and_stashed_colors := .04; // Relative to rect.w.
 
@@ -1850,13 +1849,13 @@ Color_Picker_Theme :: struct {
     background.shape.roundedness_type     = .ABSOLUTE_FROM_GLOBAL;
     background.shape.frame_thickness_type = .ABSOLUTE_FROM_GLOBAL;
     background.shape.rounding_flags       = .SOUTH;
-    
+
     background.color                      = Vector4.{.00, .10, .10, 1};
-    
+
     outer_circle_diameter := .99;    // Relative to the available circle area's width (which is computed by cutton off the margins).
     inner_circle_diameter := .73;    // Same.
     inner_disc_radius     := .95;    // Relative to inner_circle_diameter. 1.0 means it will meet the inner circle (but the rendering is not set up to do this seamlessly so you would get cracks etc.)
-    
+
     initial_stashed_colors: [] Vector3 = Vector3.[
             .{1,1,1}, .{.1, .1, .1},
             .{.529, .248, .214}, .{.744, .601, .199}, .{.788, .555, .456}, .{.469, .805, .230}, .{.184, .744, .286}, .{.184, .654, .744}, .{.405, .360, .782}, .{.778, .456, .722}
@@ -1875,12 +1874,12 @@ Color_Picker_Theme :: struct {
 
     mode_switch_button_theme: Button_Theme;
     mode_switch_button_theme.text_color.w  = .45;  // This is for the button bitmaps.
-    mode_switch_button_theme.texture_scale = .7;  
-    
+    mode_switch_button_theme.texture_scale = .7;
+
     type_ins_label_theme: Label_Theme;
     type_ins_label_theme.text_color = Vector4.{.30, .65, .65, 1.0};
     type_ins_label_theme.alignment_pad_ems = 0.3;
-    
+
     type_ins_input_theme: Number_Input_Theme;
 
     stashed_colors_shape: Rectangle_Shape;
@@ -1891,7 +1890,7 @@ Color_Picker_Theme :: struct {
 
 Color_Picker_State :: struct #type_info_none {
     #as using widget: Active_Widget;
-    
+
     ring_point     := Vector2.{1, 0};
     disc_point     := Vector2.{1, 0};
 
@@ -1922,7 +1921,7 @@ Color_Picker_State :: struct #type_info_none {
     toggled_v: bool;
     toggled_s_t: float;
     toggled_v_t: float;
-    
+
 /*
     hue_zooming: bool;
     hue_zoom_t:  float;
@@ -1930,9 +1929,9 @@ Color_Picker_State :: struct #type_info_none {
 
     hsv_picker_in_rectangle_mode := true;
     circle_picker_in_warped_mode := false;
-    
+
     zoom_hue_center := 0.0;  // In degrees; where the zoomed hue bar is centered. Doesn't move when you change hue via that bar itself.
-    
+
     color_pick_mode := Color_Pick_Mode.HSV_CIRCLE;
 
     current_hsv_color: Vector3;      // In 2.2 gamma space.

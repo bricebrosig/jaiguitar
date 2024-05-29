@@ -1,4 +1,4 @@
-slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, theme: *Slider_Theme, prefix := "", suffix := "", identifier: s64 = 0, loc := #caller_location) -> bool { 
+slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, theme: *Slider_Theme, prefix := "", suffix := "", identifier: s64 = 0, loc := #caller_location) -> bool {
     #assert (T == float) || (T == float64) || is_integer_type(T);
 
     hash  := get_hash(loc, identifier);
@@ -7,7 +7,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
 
     if created set_initial_value(state, << value);
     state.value_type = type_info(T);
-    
+
     text: string;
     if !state.inputting_text {
         #if (T == float64) || (T == float32) {
@@ -26,7 +26,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
     status := get_status_flags(body_rect);
 
     text_input_state: *Text_Input_State;
-    
+
     changed := false;
     if theme.text_editable {
         // Let's do it when the user clicks anywhere in the slider, not just the text.
@@ -36,7 +36,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
 
         input_state := find_or_create_state(Text_Input_State, hash, false);
         assert(input_state != null);
-        
+
         if (status & .OVER) && (mouse_button_right_state & .START) && !state.inputting_text { // @Incomplete: || ui.mouse_button_left_double_click) {
             // Do something here about focus. For now we require the user to handle it.ui.force_focus = true;
             // focus = true;
@@ -49,7 +49,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
             } else {
                 if theme.format_text_int    text = theme.format_text_int(prefix, suffix, value.*, theme, state, .EDITING);
             }
-            
+
             set_text(input_state, text);
             activate(input_state);
             changed = true;
@@ -59,23 +59,23 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
         if state.inputting_text {
             if (!input_state.active) || !focus  state.inputting_text = false;
         }
-        
+
         if state.inputting_text {
             text_input_theme := theme.text_input_theme;
             if !text_input_theme.font  text_input_theme.font = font;
-            
+
             actions := text_input(body_rect, "", *text_input_theme, identifier, loc);  // :Nicer use inert_text to simplify this?
 
             if actions & .ENTERED {
                 state.inputting_text = false;
                 text := input_state.text;
-                
+
                 #if (T == float64) || (T == float32) {
                     success, result := slider_parse_text_float_default(text, theme, state);
                 } else {
                     success, result := slider_parse_text_int_default(text, theme, state);
                 }
-                
+
                 if success {
                     set_and_maybe_clamp(result, value, min_value, max_value, theme.clamp_text_input_low, theme.clamp_text_input_high);
                     return true;
@@ -84,8 +84,8 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
                 state.inputting_text = false;
             } else if !input_state.active {  // If the user presses scape on all. :Nicer?
                 state.inputting_text = false;
-            }                
-            
+            }
+
             return false;
         }
     }
@@ -103,9 +103,9 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
 
         result := value.*;
         button_theme.rectangle_shape.rounding_flags = Rectangle_Shape.Rounding_Flags.NORTHWEST | .SOUTHWEST;
-        pressed_down, state_down := button(down_rect, "", *button_theme, xx hash);  // Use current location.
+        pressed_down, state_down := button(down_rect, "", *button_theme, xx,no_check hash);  // Use current location.
         button_theme.rectangle_shape.rounding_flags = Rectangle_Shape.Rounding_Flags.NORTHEAST | .SOUTHEAST;
-        pressed_up, state_up     := button(up_rect,   "", *button_theme, xx hash);  // Use current location.
+        pressed_up, state_up     := button(up_rect,   "", *button_theme, xx,no_check hash);  // Use current location.
 
         triangle_margin := up_rect.w * 0.1;
 
@@ -138,7 +138,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
             draw_arrow(state_up, p4, p5, p6, *button_theme);
         }
 
-        
+
         if pressed_up    result += spinbox_step;
         if pressed_down  result -= spinbox_step;
 
@@ -147,7 +147,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
             status |= .DOWN;
         }
     }
-    
+
     started_sliding := false;
     if status & .PRESSED /* @Incomplete && !ui.slider_input_mode*/ {
         // Started dragging. We can do some visual thing here...
@@ -165,6 +165,8 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
     value_denom := max_value - min_value;
     if !value_denom  value_denom = 1;
     t := (cast(float)(value.* - min_value)) / value_denom;
+
+    Clamp(*t, 0, 1);
 
     if state.sliding {
         if !(mouse_button_left_state & .DOWN) {
@@ -195,7 +197,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
 
         shift_state := ui_get_button_state(.SHIFT);
         if !theme.sliding_becomes_relative_by_pressing_shift  shift_state = 0;  // Just disable shift.
-        
+
         if shift_state & .DOWN {
             // @Responsiveness: slowing_t will be 0 on the first slowing frame, which is generally bad for feeling reactive.
             relative_slide_factor  = theme.relative_slide_factor_modified;
@@ -222,7 +224,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
             delta := mouse_delta_x_float * relative_slide_factor;
             #if (T == float64) || (T == float32) {
                 t += delta / denom;
-                
+
                 if started_inside || theme.do_clamp_if_we_are_relative_dragging_but_started_outside_the_clamp_range {
                     Clamp(*t, 0, 1);
                 }
@@ -248,10 +250,10 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
             }
         } else {
             // Absolute motion.
-            
+
             t = (mouse_x_float - body_rect.x - 1) / denom;
             t = saturate(t);
-        
+
             #if (T == float64) || (T == float32) {
                 value.* = lerp(min_value, max_value, t);
             } else {
@@ -273,7 +275,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
         body_rect.y -= dy;
         body_rect.h += 2*dy;
     }
-    
+
     state.sliding_t = move_toward(state.sliding_t, sliding_t_target, dt * 5);  // @Theme
 
     if slowing_t_target {
@@ -283,20 +285,20 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
     }
 
     if state.sliding  status |= .OVER;
-    
+
     state.changed_this_frame = changed;
     update_production_value_button(body_rect, changed, *state.background, status,    *theme.background);
-    
+
     sliding_t := state.sliding_t;
 
     state.current_slide_setting = t;
-    
+
     if theme.draw_background  theme.draw_background(body_rect, theme, state);
 
     //
     // Compute the surface rect.
     //
-    
+
     qrect := body_rect;
     qrect.y += surface_margin;
     qrect.h -= 2*surface_margin;
@@ -304,11 +306,8 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
       case .EXTEND_FROM_LEFT;
         qrect.x += surface_margin;
         qrect.w = (body_rect.w - 2*surface_margin) * cast(float) t;
-        
-        if state.value_type.type != .FLOAT { // If it's integral, don't ever go totally to 0. (Does this make sense any more?)
-            if qrect.w == 0 qrect.w = 1;
-        }
-    
+
+        if qrect.w < 1  qrect.w = 1;  // Leave a tiny glimmer of a bar there.
       case .NUB;
         thickness := get_float_parameter(body_rect, theme.nub_thickness_type, theme.nub_thickness, global_slider_nub_thickness_in_pixels);
         mid_x_relative := (body_rect.w - 2*surface_margin - thickness) * cast(float) t;
@@ -320,8 +319,9 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
     //
     // Invoke the foreground draw routine.
     //
-    if theme.draw_foreground  theme.draw_foreground(body_rect, qrect, theme, state);
-        
+    if theme.draw_foreground
+        theme.draw_foreground(body_rect, qrect, theme, state);
+
     draw_procs.immediate_flush();
     label_from_prepared_text(body_rect, font, *theme.foreground.label_theme);
 
@@ -359,9 +359,9 @@ set_and_maybe_clamp :: (new_value: $ValueType, pointer: *$T, min_value: T, max_v
 
     if clamp_low   t_value = max(min_value, t_value);
     if clamp_high  t_value = min(max_value, t_value);
-    
+
     <<pointer = t_value;
-}    
+}
 
 
 to_vec3 :: (v2: Vector2) -> Vector3 {
@@ -370,7 +370,7 @@ to_vec3 :: (v2: Vector2) -> Vector3 {
 
     return result;
 }
-    
+
 draw_arrow :: (state: *Button_State, p4: Vector3, p5: Vector3, p6: Vector3, theme: *Button_Theme) {
     ARROW_INTERPOLATION_AMOUNT :: .14;
     s := state.action_duration * 2;
@@ -396,7 +396,7 @@ draw_arrow :: (state: *Button_State, p4: Vector3, p5: Vector3, p6: Vector3, them
 
 //
 // Default slider draw procs:
-// 
+//
 
 slider_draw_background_default :: (r: Rect, theme: *Slider_Theme, state: *Slider_State) {
     draw_procs.set_shader_for_color();
@@ -411,14 +411,14 @@ slider_draw_foreground_default :: (r_background: Rect, r_foreground: Rect, theme
     // Update:
     //
 
-    r := r_foreground; 
+    r := r_foreground;
     t := state.current_slide_setting;
 
     // Check whether the cursor is over the interior nub,
     // and so forth.
     status := get_status_flags(r);
     if state.sliding  status |= .OVER;
-    
+
     changed := state.changed_this_frame;
     update_production_value_button(r, changed, *state.foreground, status, *theme.foreground);
 
@@ -428,7 +428,7 @@ slider_draw_foreground_default :: (r_background: Rect, r_foreground: Rect, theme
 
     draw_procs.set_shader_for_color();
     fg_color, fg_frame_color, fg_frame_thickness := get_colors_and_thickness_for_button(*theme.foreground, *state.foreground);
-    
+
     if fg_color.w || fg_frame_color.w {
         rounded_rectangle(r, theme.background.rectangle_shape, fg_color, fg_frame_color, fg_frame_thickness);
     }
@@ -441,14 +441,14 @@ Slider_Format_Text_Mode :: enum u8 {
 
 slider_format_text_float_default :: (prefix: string, suffix: string, value: float64, theme: *Slider_Theme, state: *Slider_State, mode: Slider_Format_Text_Mode) -> string {
     if mode == .EDITING return tprint("%", value);
-    
+
     text := tprint("%1%2%3", prefix, formatFloat(value, trailing_width=theme.decimals, zero_removal=.NO), suffix);
     return text;
 }
 
 slider_format_text_int_default :: (prefix: string, suffix: string, value: s64, theme: *Slider_Theme, state: *Slider_State, mode: Slider_Format_Text_Mode) -> string {
     if mode == .EDITING return tprint("%", value);
-    
+
     text := tprint("%1%2%3", prefix, value, suffix);
     return text;
 }
@@ -483,14 +483,14 @@ Slider_Theme :: struct {
     // If sliding a float, how many digits of precision to display after the decimal.
     // This is used by the default string format routine only. If you substitute
     // your own, this is ignored.
-    decimals: s32 = 2;  
+    decimals: s32 = 2;
 
     background: Button_Theme;
     background.surface_color          = .{0.0, 0.1, 0.00, 1.0};
     background.surface_color_over     = .{0.0, 0.2, 0.00, 1.0};
     background.surface_color_flash    = .{0.0, 0.2, 0.10, 1.0};
     background.surface_color_down     = .{0.0, 0.2, 0.15, 1.0};
-    
+
     background.frame_color            = .{0.2, 0.3, 0.20, 1.0};
     background.frame_color_over       = .{0.2, 0.4, 0.20, 1.0};
     background.frame_color_flash      = .{0.2, 0.4, 0.30, 1.0};
@@ -504,12 +504,12 @@ Slider_Theme :: struct {
 
     sliding_is_relative   := false;  // If false, the slider goes to the mouse pointer's position on the screen. If true, you change it via mouse motion.
     sliding_becomes_relative_by_pressing_shift := true;  // Has no meaning if sliding_is_relative == true. But if we start in non-relative mode, we can become relative by pressing shift. This also changes the slide factor from default to modified.
-    
+
     relative_slide_factor          := 0.7;    // The number of pixels by which the slider value will change, relative to the number of pixels of mouse motion.
     relative_slide_factor_modified := 0.2;    // Slide factor when the user is holding the shift key.
 
     do_clamp_if_we_are_relative_dragging_but_started_outside_the_clamp_range := false;  // By default you can type a value beyond the official min/max, and still be able to drag out in that range. Set to true if you want to clamp on any drag action.  See also clamp_text_input_*.
-    
+
     text_input_theme: Text_Input_Theme;  // If you decide to edit the slider. Note, this has a separate alignment_pad_ems, etc, so you may wish to keep these in sync with the slider's sliding-mode display, or, you may not.
 
     use_spinboxes        := true;
@@ -526,7 +526,7 @@ Slider_Theme :: struct {
     // nub_thickness* are only used if surface_style == .NUB ...
     nub_thickness_type := Size_Computation.RELATIVE_TO_HEIGHT;
     nub_thickness      := 1.2;
-    
+
     spinbox_theme:      Button_Theme;
 
     spinbox_theme.text_color         = .{ .1, .42, .42, 1 };
@@ -556,7 +556,7 @@ Slider_Theme :: struct {
 
 Slider_State :: struct #type_info_none {
     #as using widget: Active_Widget;
-    
+
     background: Button_State;
     foreground: Button_State;
 
@@ -580,5 +580,5 @@ Slider_State :: struct #type_info_none {
     current_slide_setting: float;   // From 0 to 1; use this in your draw routine.
     surface_margin_this_frame_in_pixels: float;  // Can use this in the draw routine.
     changed_this_frame: bool;       // Did the user do some activating thing?
-}    
+}
 

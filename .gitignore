@@ -6,3 +6,4 @@ build
 guitar
 guitar.dSYM
 *.raddbg
+.vscode

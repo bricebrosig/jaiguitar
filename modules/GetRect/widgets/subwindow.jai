@@ -20,7 +20,7 @@ add_subwindow :: (info: *Subwindow_Info, theme: *Subwindow_Theme = null, identif
     if created array_add(*subwindows, state);
 
     if !theme  theme = *default_overall_theme.subwindow_theme;
-    state.theme = <<theme;
+    state.theme = theme.*;
 
     state.hash = hash;
     state.info = info;
@@ -93,12 +93,6 @@ draw_subwindow :: (state: *Subwindow_State) {
         else active_widget_remove(state);
     }
 
-    // Calculate state.opaque_t opacity hint people can use in their draw_procs to dynamically fade the subwindow and its widgets.
-    opacity_target := ifx !info.faded then 1.0;
-    state.opaque_t = move_toward(state.opaque_t, opacity_target, ifx state.opaque_t > opacity_target       // Theme this move_toward?
-                                                                 then current_dt * 3.0 * state.opaque_t * state.opaque_t
-                                                                 else current_dt * 10.0);
-
     title_bar_rect, content_area := cut_top(full_rect, title_bar_height);
     state.title_bar_rect = title_bar_rect;
 
@@ -128,7 +122,7 @@ draw_subwindow :: (state: *Subwindow_State) {
     push_scissor(expand(content_area, -frame_pixels));
 
     draw := state.info.draw;
-    if draw  draw(content_area, state.info.user_data);
+    if draw  draw(state, content_area, state.info.user_data);
 
     if !some_widget_received_left_mouse_button && (mouse_button_left_state & .START) {
         flags := get_status_flags(full_rect, ignore=.LEFT_CLICK);
@@ -171,6 +165,26 @@ draw_subwindow :: (state: *Subwindow_State) {
     //
     occlusion := full_rect;
 
+    if state.draw_proc_adjusted_y {
+        state.draw_proc_adjusted_y = false;
+
+        dy := state.draw_proc_new_y1 - content_area.y;
+        if dy {
+            full_rect.y += dy;
+            full_rect.h -= dy;
+        }
+        
+        /*
+        old_top := content_area.y + content_area.h;
+        
+        new_h := old_top - state.draw_proc_new_y1;
+        new_y := old_top - new_h;
+
+        occlusion.y = new_y;
+        occlusion.h = new_h;
+*/
+    }
+    
     pressed_flags: Resize_Controls;
     over_flags:    Resize_Controls;
 
@@ -182,8 +196,8 @@ draw_subwindow :: (state: *Subwindow_State) {
 
         check_resize_rect :: (r: Rect, flag: Resize_Controls, over: *Resize_Controls, pressed: *Resize_Controls) {
             status := get_status_flags(r);
-            if status & .PRESSED then << pressed |= flag;
-            if status & .OVER    then << over    |= flag;
+            if status & .PRESSED then pressed.* |= flag;
+            if status & .OVER    then over.*    |= flag;
         }
 
         hmargin := theme.drag_corner_margin * rth;
@@ -281,6 +295,8 @@ draw_subwindow :: (state: *Subwindow_State) {
         title_button_hash := combine_hashes(state.hash, sub_hash_title);
 
         close_button_pressed := false;
+        close_button_state: *Button_State;
+
         inside_close_button  := false;
         resize_related_disable := pressed_flags || over_flags;  // :TitleBarOverride  If we changed the mouse pointer image because we are over a drag rect, we by no means want to press or even highlight the button, because we are telling the user that a mouse click will drag the subwindow!
 
@@ -309,7 +325,6 @@ draw_subwindow :: (state: *Subwindow_State) {
         if theme.subwindow_flags & .CLOSE_BUTTON {
             sub_hash_close := get_hash(#location(), 0);
             close_button_hash := combine_hashes(state.hash, sub_hash_close);
-            close_button_state: *Button_State;
             close_button_pressed, close_button_state = button(c, "", *theme.close_button, xx,no_check close_button_hash);
 
             // Draw the X on the close button.
@@ -343,6 +358,9 @@ draw_subwindow :: (state: *Subwindow_State) {
 
         if close_button_pressed {
             state.info.open = false;
+            close_button_state.pressed = false;
+            // NOTE(Berk): We need to set the button to not being pressed when we close the window or else when the window reopens the button will think that it is still pressed.
+            // This will cause it to steal focus from other widgets if we wanted to, for example, open the window focused on some other widget (like a search bar, which is how I realized this had to be here.)
         } else if title_bar_pressed {
             state.dragging                = .TITLE;
             state.dragging_start          = v2(mouse_x_float, mouse_y_float);
@@ -466,8 +484,8 @@ update_dragging :: (state: *Subwindow_State, full: *Rect) {
                 } else {
                     // Dot the relative motion against the diagonal from upper-left to lower-right.
                     // Then just use the dx from that and compute the corresponding dy.
-                    delta := v2(dx, dy);
-                    dir   := unit_vector(v2(f.w, -f.h));
+                    delta := Vector2.{dx, dy};
+                    dir   := unit_vector(Vector2.{f.w, -f.h});
 
                     aligned := dot_product(dir, delta) * dir;
 
@@ -486,12 +504,14 @@ update_dragging :: (state: *Subwindow_State, full: *Rect) {
                         if abs(new_w - state.info.snap_to_size.x) < hmargin
                             new_w = state.info.snap_to_size.x;
                     }
+                    
                     if flags & .SNAP_NS {
                         vmargin := theme.resize_snap_margin * rth;
                         if abs(new_h - state.info.snap_to_size.y) < vmargin
                             new_h = state.info.snap_to_size.y;
                     }
                 }
+                
                 if new_w < min_w  new_w = min_w;
                 if new_h < min_h  new_h = min_h;
             }
@@ -518,9 +538,9 @@ update_dragging :: (state: *Subwindow_State, full: *Rect) {
 
             f.h = new_h;
 
-            my_full := << f;
+            my_full := f.*;
             my_full.h += state.title_bar_rect.h;
-            <<full = my_full;
+            full.* = my_full;
         }
     }
 
@@ -651,6 +671,12 @@ draw_resize_corner :: (theme: *Subwindow_Theme, state: *Subwindow_State, r: Rect
     draw_procs.immediate_quad(p0, p1, p2, p3, color);
 }
 
+draw_proc_adjust_y1 :: (state: *Subwindow_State, new_y1: float) {
+    state.draw_proc_adjusted_y = true;
+    state.draw_proc_new_y1 = new_y1;
+}
+
+
 Subwindow_Flags :: enum_flags u16 {
     TITLE_BAR    ::          0x1;
     CLOSE_BUTTON ::          0x2;
@@ -770,22 +796,11 @@ Subwindow_Info :: struct {
     snap_to_size: Vector2; // With the relevant Resize_Controls set, the subwindow will snap to this size when the user is drag-resizing it.
 
     user_data: *void;    // This is passed to draw().
-    draw: (content_rect: Rect, user_data: *void);  // We call this to draw your window.
+    draw: (state: *Subwindow_State, content_rect: Rect, user_data: *void);  // We call this to draw your window.
 
     open := true;
 
     wants_a_raise := false;      // wants_a_raise will be reset by the system after it raises the Subwindow_State.
-
-    faded := false;
-    // Toggling this will animate subwindow_state.opaque_t (0.0 = fully-faded, 1.0 = opaque).
-    // A simple way to use this is to use current_subwindow.opaque_t inside your draw_procs (immediate_triangle, immediate_quad,
-    // draw_prepared_text), to modulate the passed-in color's alpha channel.  For example:
-    //
-    // my_immediate_quad :: (p0: Vector2, p1: Vector2, p2: Vector2, p3: Vector2, color := Vector4.{1,1,1,1}, uv0 := Vector2.{0,0}, uv1 := Vector2.{1,0}, uv2 := Vector2.{1,1}, uv3 := Vector2.{0, 1}) {
-    //     modulated_color := color;
-    //     if current_subwindow  modulated_color.w *= lerp(faded_alpha, 1.0, current_subwindow.opaque_t);
-    //     immediate_quad(p0, p1, p2, p3, uv0, uv1, uv2, uv3, modulated_color);
-    // }
 }
 
 Subwindow_State :: struct #type_info_none {
@@ -816,7 +831,10 @@ Subwindow_State :: struct #type_info_none {
     dragging_resize_control: Resize_Controls;  // This can be HORIZONTAL, VERTICAL, or both, and possibly PROPORTIONAL (in case there is a way to choose proportional or non-proportional resize with the same widget... which there currently is not (yet?))
     resizing_aspect: float;
 
-    opaque_t := 1.0;
-
     theme: Subwindow_Theme; // So that we know what they passed to begin_subwindow, and don't require them to pass it again in end_subwindow.
+
+    draw_proc_adjusted_y := false;
+    draw_proc_new_y1     := 0.0;
 }
+
+

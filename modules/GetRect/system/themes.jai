@@ -388,17 +388,17 @@ invert_button_theme :: (button_theme : *Button_Theme) {
     //This will swap frame and surface colors of button_theme.
     //This is useful if for example you want to have a set of buttons atop a scrollable region,
     // which by default would have the same surface_color as the button_theme.
-    button_theme.surface_color,       button_theme.frame_color       = swap(button_theme.surface_color,       button_theme.frame_color);
-    button_theme.surface_color_over,  button_theme.frame_color_over  = swap(button_theme.surface_color_over,  button_theme.frame_color_over);
-    button_theme.surface_color_flash, button_theme.frame_color_flash = swap(button_theme.surface_color_flash, button_theme.frame_color_flash);
-    button_theme.surface_color_down,  button_theme.frame_color_down  = swap(button_theme.surface_color_down,  button_theme.frame_color_down);
+    Swap(*button_theme.surface_color,       *button_theme.frame_color);
+    Swap(*button_theme.surface_color_over,  *button_theme.frame_color_over);
+    Swap(*button_theme.surface_color_flash, *button_theme.frame_color_flash);
+    Swap(*button_theme.surface_color_down,  *button_theme.frame_color_down);
 }
 
 invert_scrollbar :: (using scrollable_region_theme : *Scrollable_Region_Theme) {
-    scrollbar_background.color, scrollbar_background.frame_color = swap(scrollbar_background.color, scrollbar_background.frame_color);
+    Swap(*scrollbar_background.color, *scrollbar_background.frame_color);
     {
         using scrollable_region_theme.scrollbar_nib_theme;
-        surface_color, frame_color = swap(surface_color, frame_color);
+        surface_color, frame_color = frame_color, surface_color;
     }
 }
 
@@ -658,7 +658,7 @@ theme_proc_nimbus :: () -> Overall_Theme {
     }
     {//Checkbox
         using result.checkbox_theme; button_color_selected = saturated_blue; 
-        text_color_selected, text_color = swap(text_color_selected, text_color);
+        text_color_selected, text_color = text_color, text_color_selected;
         text_color = darken(text_color, 0.1);
         text_color_over = darken(text_color, 0.2);
         text_color_pressed = .{0.0, 0.03, 0.03, 1.0};

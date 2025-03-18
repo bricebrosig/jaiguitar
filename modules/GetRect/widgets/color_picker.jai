@@ -725,9 +725,9 @@ color_rectangle :: (r: Rect, input_color: Vector3, value_x: *float, value_y: *fl
 
     // Don't disable dragging until after we draw ... so we get at least
     // one update if we do an intra-frame click.
-    if <<dragging {
+    if dragging.* {
         if !down {
-            << dragging = false;
+            dragging.* = false;
         }
     }
 

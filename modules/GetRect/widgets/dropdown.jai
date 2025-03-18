@@ -149,7 +149,7 @@ draw_dropdown_popup :: (_state: *void) {
 
     // For now, assume the choices are the same height as the current value display.
     s := r;
-    // s.y -= r.h;  // @brice
+    // s.y -= r.h; // @brice
     s.y += r.h;
 
     top_y    := s.y;
@@ -166,8 +166,8 @@ draw_dropdown_popup :: (_state: *void) {
 
             pressed, _, released := button(s, it, t, xx,no_check choice_hash, state.loc);
             bottom_y = s.y;
-            // s.y -= s.h;
-            s.y += s.h;  // @brice make dropdown go up
+            // s.y -= s.h;  // @brice
+            s.y += s.h;
 
             if released {
                 pick_choice = it_index;

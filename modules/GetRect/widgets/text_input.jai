@@ -85,7 +85,10 @@ text_input :: (_r: Rect, inert_text: string, theme: *Text_Input_Theme, identifie
         draw(state, body_rect, *text_input_theme, identifier, loc);
 
         if result_action & .ENTERED {
-            if theme.deactivate_on_enter state.active  = false;
+            if theme.deactivate_on_enter {
+                active_widget_remove(state); // This will call the deactivate_proc, which sets active to false.
+            }
+            
             text := state.text;
             return result_action, text, state;
         }
@@ -1391,12 +1394,23 @@ press_enter :: (using state: *Text_Input_State, shift_pressed := false) {
 
     // shift_plus_enter_was_pressed = shift_pressed;
 
-    copy := copy_string(text);
-    if text  array_add(*command_history, copy);  // Don't add blank lines.
-    command_history_index += 1;
 
+    // If we would duplicate the last entry in the command history, just skip it,
+    // since we don't want to spam with identical commands. We could make this configurable.
+
+    should_add := true;
+    if text && command_history && (text == peek(command_history)) should_add = false;
+    if !text  should_add = false;
+    
+    if should_add {
+        copy := copy_string(text);
+        array_add(*command_history, copy);  // Don't add blank lines.
+    }
+
+    command_history_index = command_history.count;  // Always jump to the end, for now. We could make this configurable.
+    
     free(pre_modification_text);
-    pre_modification_text = copy_string(copy);
+    pre_modification_text = copy_string(text);
 }
 
 press_tab :: (using state: *Text_Input_State, shift_pressed := false) {

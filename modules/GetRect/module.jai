@@ -159,7 +159,7 @@ map_mode_numbers:   *Texture;
 
 
 
-Draw_Procs :: struct {  // Not yet used, but the idea is that you can substitute these rather than using Simp.
+Draw_Procs :: struct {  // What GetRect calls into in order to perform operations. By default we use Simp, but you can override these by passing a Draw_Procs to ui_init().
     texture_load_from_memory: (texture: *Texture, memory: [] u8, srgb: bool, build_mipmaps: bool) -> bool;
     set_scissor:   (x0: s32, y0: s32, x1: s32, y1: s32);
     clear_scissor: ();
@@ -986,7 +986,10 @@ events_per_window_update :: (window: Window_Type) {
     for state_table {
         if !it.check_for_activation_proc continue;
         if it.window != window continue;
-
+        // NOTE(daniel): If the widget was not drawn (state wasn't used last frame), it means it is invisible.
+        //  Don't attempt to activate it. Is there a better way to check if something is invisible?
+        //  Except for using the `scissor_stack`, that can be empty, but the widget might still not be visible.
+        if it.last_getrect_frame < current_getrect_frame - 1 continue;
         array_add(*activation_proc_widgets, it);
     }
 

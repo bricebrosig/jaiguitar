@@ -172,7 +172,7 @@ draw_color_picker :: (theme: *Color_Animation_Editor_Theme, state: *Color_Animat
     subwindow_state := add_subwindow(sub, subwindow_theme);
 }
 
-draw_callback_color_picker :: (r: Rect, data: *void) {
+draw_callback_color_picker :: (state: *Subwindow_State, r: Rect, data: *void) {
     state := cast(*Color_Animation_Editor_State) data;
 
     applied, still_dragging, color_picker_state := color_picker(r, *state.color_picker_editing_color_applied, *state.theme.color_picker_theme);
@@ -201,7 +201,7 @@ find_index_of_t :: (sorted: [] *Augmented_Keyframe, t: float) -> (index: int) {
     return index;
 }
 
-draw_callback_time_view :: (r: Rect, data: *void) {
+draw_callback_time_view :: (state: *Subwindow_State, r: Rect, data: *void) {
     state := cast(*Color_Animation_Editor_State) data;
 
     if state.time_view_playing {
@@ -419,7 +419,7 @@ my_color_slider :: (rect: Rect, alpha: float, theme: *Color_Animation_Editor_The
     // Pass 1: Fill out the colors.
     //
 
-    num_samples := ifx cast(s32) floor(rect.w + .5) else 2;  // One per pixel, bro!
+    num_samples := max(2, cast(s32) floor(rect.w + .5));  // One per pixel, bro!
 
     samples := *state.color_samples;
     array_resize(samples, num_samples);

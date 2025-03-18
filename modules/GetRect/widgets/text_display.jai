@@ -200,7 +200,7 @@ flow :: (topic: *Topic_Info, unflowed: *History_Line) {
         
         if text_width <= xx console_width {
             flowed := array_add(*topic.flowed_history);
-            << flowed = << unflowed;
+            flowed.* = unflowed.*;
             flowed.text      = s;
             flowed.continued = continued;
             break;
@@ -236,7 +236,7 @@ flow :: (topic: *Topic_Info, unflowed: *History_Line) {
             advance(*s, subtext.count);
 
             flowed := array_add(*topic.flowed_history);
-            << flowed = << unflowed;
+            flowed.* = unflowed.*;
             flowed.text      = subtext;
             flowed.continued = continued;
             

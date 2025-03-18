@@ -619,7 +619,7 @@ draw_one_frame :: (dt: float) {
     Simp.swap_buffers(my_window);
 }
 
-draw_subwindow_text :: (r: Rect, data: *void) {
+draw_subwindow_text :: (state: *Subwindow_State, r: Rect, data: *void) {
     font := story_font;
     lines := split(TEXT_FIELD_1, "\n");
 
@@ -678,12 +678,12 @@ draw_subwindow_text :: (r: Rect, data: *void) {
     subwindow_info_text.snap_to_size.y = inside.y - min_y + r.h; // inside.h cancels itself
 }
 
-draw_subwindow_circle :: (r: Rect, data: *void) {
+draw_subwindow_circle :: (state: *Subwindow_State, r: Rect, data: *void) {
     color_picker_theme := *my_theme.color_picker_theme;
     applied := color_picker(r, *picked_color, color_picker_theme);
 }
 
-draw_subwindow_color_animation_editor :: (r: Rect, data: *void) {
+draw_subwindow_color_animation_editor :: (state: *Subwindow_State, r: Rect, data: *void) {
     theme := *my_theme.color_animation_editor_theme;
     applied := color_animation_editor(r, theme);
 }

@@ -5,7 +5,7 @@ slider :: (_r: Rect, value: *$T, min_value: T, max_value: T, spinbox_step: T, th
     state, created := find_or_create_state(Slider_State, hash);
     defer stop_using_state(state);
 
-    if created set_initial_value(state, << value);
+    if created set_initial_value(state, value.*);
     state.value_type = type_info(T);
 
     text: string;
@@ -332,14 +332,14 @@ set_initial_value :: (state: *Slider_State, value: $T) {
     #assert(T == float64) || (T == float32) || is_integer_type(T);  // @Incomplete: We will want to support all int types.
     #if T == float64  state.initial_value_float64 = value;
     #if T == float32  state.initial_value_float32 = value;
-    else { << cast(*T) *state.initial_value_int = value; } // Integer type.
+    else { (cast(*T) *state.initial_value_int).* = value; } // Integer type.
 }
 
 get_initial_value :: (state: *Slider_State, $T: Type) -> T {
     #assert(T == float64) || (T == float32) || is_integer_type(T);  // @Incomplete: We will want to support all int types.
     #if T == float64  return state.initial_value_float64;
     else #if T == float32  return state.initial_value_float32;
-    else return << cast(*T) *state.initial_value_int; // Integer type.
+    else return (cast(*T) *state.initial_value_int).*; // Integer type.
 
     assert(false);
     return 0;
@@ -360,7 +360,7 @@ set_and_maybe_clamp :: (new_value: $ValueType, pointer: *$T, min_value: T, max_v
     if clamp_low   t_value = max(min_value, t_value);
     if clamp_high  t_value = min(max_value, t_value);
 
-    <<pointer = t_value;
+    pointer.* = t_value;
 }
 
 

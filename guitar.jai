@@ -1,3 +1,13 @@
+/*
+TODO
+[ ] - tree of panels UI (like raddbg style)
+[ ] - generate chord diagram
+[ ] - save / delete chord sheet
+[ ] - hash chord shapes and disallow duplicates in the saved shapes
+[ ] - tab sheet
+[ ] - add / repeat chords on tab sheet
+*/
+
 SCALE :: 1;  // use this during development to quickly make the window real big.
 
 my_window: Window_Type;
@@ -56,17 +66,14 @@ chord :: struct {
 }
 
 SharpsOrFlats :: enum { SHARPS; FLATS; }
-sharps_or_flats : SharpsOrFlats = .SHARPS;
 
-           // 0   1   2   3   4   5   6   7   8   9   10  11
 flats : []string = .["A ", "Bb", "B ", "C ", "Db", "D ", "Eb", "E ", "F ", "Gb", "G ", "Ab"];
 sharps: []string = .["A ", "A#", "B ", "C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#"];
 
-all_notes: []string;
-
-tuning: [..]Pitch;
-
-currently_fretted: [6]int;
+all_notes         : []string;
+tuning            : [..]Pitch;
+currently_fretted : [6]int;
+sharps_or_flats   : SharpsOrFlats = .SHARPS;
 
 get_interval_in_semitones :: (a: int, b: int) -> int {
   if a >= b {
@@ -87,10 +94,7 @@ note :: (g_string: Fret, fret: int, offset: int) -> string {
 }
 
 pitch_class_to_int :: (pitch_class: []int) -> u16 {
-  /*
-  <0 4 5> -> 00000000 00110001
-  */
-
+  // <0 4 5> -> 00000000 00110001
   value :u16 = 1;
   for pitch_class {
     value |= cast(u16) 1 << cast(u16) it; 
@@ -98,8 +102,9 @@ pitch_class_to_int :: (pitch_class: []int) -> u16 {
   return value;
 }
 
-/// given the fretted chords, compute the chords and write them to a string
-/// TODO (brice): this algorithm is really naive...
+//
+// given the fretted chords, compute the chords and write them to a string
+// TODO (brice): this algorithm is really naive...
 compute_chords :: (str: *String_Builder, fretted: []int) {
   append(str, tprint("[%, %, %, %, %, %]\n", 
     cast(int) string_6,
@@ -154,19 +159,32 @@ compute_chords :: (str: *String_Builder, fretted: []int) {
     // start with root
     append(str, tprint("%", all_notes[root % 12]));
 
-    // TODO (brice): this is very very very silly
-    has_second        := array_find(pitch_class,  2);
-    has_minor_third   := array_find(pitch_class,  3);
-    has_major_third   := array_find(pitch_class,  4);
-    has_fourth        := array_find(pitch_class,  5);
-    has_dim_fifth     := array_find(pitch_class,  6);
-    has_perfect_fifth := array_find(pitch_class,  7);
-    has_aug_fifth     := array_find(pitch_class,  8);
-    has_sixth         := array_find(pitch_class,  9);
-    has_minor_seven   := array_find(pitch_class, 10);
-    has_major_seven   := array_find(pitch_class, 11);
-    is_sus            := false;
-    modded_five       := false;
+    has_second        :bool;
+    has_minor_third   :bool;
+    has_major_third   :bool;
+    has_fourth        :bool;
+    has_dim_fifth     :bool;
+    has_perfect_fifth :bool;
+    has_aug_fifth     :bool;
+    has_sixth         :bool;
+    has_minor_seven   :bool;
+    has_major_seven   :bool;
+    is_sus            :bool;
+    modded_five       :bool;
+    for pitch: pitch_class {
+      if pitch == {
+       case 2;  has_second        = true;
+       case 3;  has_minor_third   = true;
+       case 4;  has_major_third   = true;
+       case 5;  has_fourth        = true;
+       case 6;  has_dim_fifth     = true;
+       case 7;  has_perfect_fifth = true;
+       case 8;  has_aug_fifth     = true;
+       case 9;  has_sixth         = true;
+       case 10; has_minor_seven   = true;
+       case 11; has_major_seven   = true;
+      }
+    }
     
     if has_major_third && has_aug_fifth {
       append(str, "Aug ");
@@ -230,6 +248,11 @@ compute_chords :: (str: *String_Builder, fretted: []int) {
   }
 }
 
+saved_shapes: [..]Shape;
+Shape :: struct {
+  frets: [6]Fret;
+  live: bool;
+}
 
 // the strings
 // TODO (brice): support for 7 strings? 8 strings?
@@ -393,8 +416,15 @@ draw_one_frame :: (dt: float) {
   sr_theme.orientation = .VERTICAL;
   sr_theme.first_background.shape.roundedness = 0.0;
   sr_theme.second_background = sr_theme.first_background;
+  sr_theme.initial_divider_position = 0.5;
   sr_state, top, bottom, divider := slidable_region(whole_window, *sr_theme);
   {
+
+    sr_theme.orientation = .HORIZONTAL;
+    sr_theme.initial_divider_position_type = .RELATIVE_TO_WIDTH;
+    sr_theme.initial_divider_position = 0.5;
+    top_state, left, right, divider := slidable_region(top, *sr_theme);
+
     // draw chords
     font  := button_font;
     text  := builder_to_string(*output_buffer,, allocator = temp);
@@ -412,6 +442,12 @@ draw_one_frame :: (dt: float) {
       Simp.draw_text(font, xx tx, xx ty, trimmed, color);
       ty -= cast(float) font.default_line_spacing;
     }
+
+    switch_to_right_rect(top_state);
+  
+    draw_shapes_panel(right);
+
+    finish(top_state);
   }
   
   switch_to_bottom_rect(sr_state);
@@ -425,12 +461,19 @@ draw_one_frame :: (dt: float) {
     w := 5 * cw;
     pad := cw;
     r = get_rect(bottom.w - 3 * (w + pad), bottom.h - 1.5 * ch, w, ch);
-    button(r, "add");
+    _, _, just_released := button(r, "add");
     r.x += r.w + pad;
     radio_button(r, "Sharps", *sharps_or_flats, .SHARPS, *radio_theme);
     r.x += r.w + pad;
     radio_button(r, "Flats",  *sharps_or_flats,  .FLATS, *radio_theme);
-    
+
+    if just_released {
+      array_add(*saved_shapes, Shape.{
+        .[string_6, string_5, string_4, string_3, string_2, string_1], 
+        true
+      });
+    }
+
     fx := window_width  * .1;
     fy := window_height * .1;
 
@@ -439,7 +482,7 @@ draw_one_frame :: (dt: float) {
     r3 := get_rect(fx, fy + 3 * fret_height, fret_width, fret_height);
     r4 := get_rect(fx, fy + 2 * fret_height, fret_width, fret_height);
     r5 := get_rect(fx, fy + 1 * fret_height, fret_width, fret_height);
-    r6 := get_rect(fx, fy          , fret_width, fret_height);
+    r6 := get_rect(fx, fy                  , fret_width, fret_height);
     
     ddx := window_width * .1;
     ddy := r6.y;
@@ -523,6 +566,36 @@ draw_one_frame :: (dt: float) {
   Simp.swap_buffers(my_window);
 }  // draw_one_frame
 
+draw_shapes_panel :: (rect: Rect) {
+  pad := .02 * window_width;
+  tpad := .01 * window_width;
+  cr := 0.10 * window_width;
+  chords_per_row := cast(int) (rect.w / (cr + pad));
+  r := Rect.{
+    rect.x + pad,
+    rect.y + rect.h - pad - cr, 
+    cr, 
+    cr
+  };
+
+  counter := 1;
+  for shape: saved_shapes {
+    if !shape.live  continue;
+    if counter > chords_per_row {  // what row we are on
+      r.y -= r.h + pad;
+      r.x = rect.x + pad;
+      counter = 1;
+    }
+
+    // draw the chord diagram
+    Simp.immediate_quad(r.x, r.y, r.x + r.w, r.y + r.h, .{1, 1, 1, 1});
+    draw_text("Gmaj", xx (r.x + tpad), xx (r.y + tpad), .{0,0,0,1}, shape_name_font);
+
+    r.x += r.w + pad;
+    counter += 1;
+  }
+}
+
 #scope_file
 init_fonts :: () {
   if !working_directory_set {
@@ -541,11 +614,15 @@ init_fonts :: () {
   button_font = Simp.get_font_at_size("data", "OpenSans-BoldItalic.ttf", pixel_height);
   assert(button_font != null);
 
+  pixel_height /= 2;
+  shape_name_font := Simp.get_font_at_size("data", "OpenSans-BoldItalic.ttf", pixel_height);
+  assert(button_font != null);
+
   pixel_height = window_height / 7;
   title_font = Simp.get_font_at_size("data", "OpenSans-BoldItalic.ttf", pixel_height);
 }
 
-/// calls prepare text followed by draw_prepared text
+// calls prepare text followed by draw_prepared text
 draw_text :: (text: string, x: int, y: int, color: Vector4, font: *Font) {
   text_width := Simp.prepare_text(font, text);
   Simp.draw_prepared_text(font, x, y, color);
@@ -553,9 +630,10 @@ draw_text :: (text: string, x: int, y: int, color: Vector4, font: *Font) {
 
 Font :: Simp.Dynamic_Font;
 
-my_font:   *Font;
-button_font: *Font;
-title_font:  *Font;
+my_font:         *Font;
+button_font:     *Font;
+title_font:      *Font;
+shape_name_font: *Font;
 
 working_directory_set := false;
 
@@ -566,7 +644,6 @@ Input :: #import "Input";
 #import "GetRect";
 
 #import "Basic";
-Basic :: #import "Basic"; // :CompilerBug  We need this to resolve to_lower for some reason?!
 #import "Math";
 #import "System";  // For get_path_of_running_executable. @Cleanup.
 #import "String";  // For path_strip_filename. @Cleanup.
